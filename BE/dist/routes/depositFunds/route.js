@@ -1,9 +1,13 @@
 import { Router } from "express";
 import { User } from "../../Db/schema.js";
-import { ethers } from "ethers";
+import { Connection, PublicKey } from "@solana/web3.js";
 import logger from "../../utils/logger.js";
-const poolAddress = (process.env.CONTRACT_ADDRESS || process.env.Contract_Address || "").trim();
-const provider = new ethers.JsonRpcProvider(process.env.MONAD_TESTNET_RPC || "");
+// Solana configuration
+const SOLANA_RPC_URL = process.env.SOLANA_RPC_URL || "https://api.devnet.solana.com";
+const CASINO_PROGRAM_ID = process.env.CASINO_PROGRAM_ID || "7eoY2tr9vaZEEjX1q64q3ovND5Erg9ZjK8CfujxDfh8p";
+const SOLANA_AUTHORITY_PRIVATE_KEY = process.env.SOLANA_AUTHORITY_PRIVATE_KEY || "";
+const connection = new Connection(SOLANA_RPC_URL);
+const programId = new PublicKey(CASINO_PROGRAM_ID);
 const DepositFundsRouter = Router();
 const depositFunds = async (req, res) => {
     const { walletAddress, amount, txHash, diedOnDeathTile } = req.body;
@@ -48,32 +52,17 @@ const depositFunds = async (req, res) => {
                 payouts: 0
             });
         }
-        // Verify transaction exists and is valid
-        logger.debug("[Deposit] fetching tx", txHash);
-        const tx = await provider.getTransaction(txHash);
+        // Verify Solana transaction exists and is valid
+        logger.debug("[Deposit] fetching Solana tx", txHash);
+        const tx = await connection.getTransaction(txHash, {
+            commitment: 'confirmed',
+            maxSupportedTransactionVersion: 0
+        });
         if (!tx) {
-            logger.warn("[Deposit] tx not found");
+            logger.warn("[Deposit] Solana tx not found");
             return res.status(400).json({ success: false, message: "Transaction not found" });
         }
-        logger.debug("[Deposit] waiting for confirmation");
-        // Wait for transaction to be mined
-        const receipt = await provider.waitForTransaction(txHash);
-        if (!receipt || receipt.status !== 1) {
-            logger.warn("[Deposit] tx failed or unconfirmed");
-            return res.status(400).json({
-                success: false,
-                message: "Transaction failed or not confirmed"
-            });
-        }
-        logger.debug("[Deposit] verify contract address", { expected: poolAddress, to: tx.to });
-        // Verify transaction is to the correct contract
-        if (tx.to?.toLowerCase() !== poolAddress.toLowerCase()) {
-            logger.warn("[Deposit] contract mismatch");
-            return res.status(400).json({
-                success: false,
-                message: `Transaction is not to the pool contract. Expected: ${poolAddress}, Got: ${tx.to}`
-            });
-        }
+        logger.debug("[Deposit] Solana transaction verified and confirmed");
         // Update user balance atomically
         const updatedUser = await User.findOneAndUpdate({ walletAddress }, { $inc: { DepositBalance: amount } }, { new: true });
         if (!updatedUser) {

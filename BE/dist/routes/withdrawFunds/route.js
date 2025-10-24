@@ -1,14 +1,26 @@
 import { Router } from "express";
 import { User } from "../../Db/schema.js";
-import { ethers } from "ethers";
+import { Connection, PublicKey, Keypair, SystemProgram, Transaction } from "@solana/web3.js";
 import logger from "../../utils/logger.js";
-import { PoolABI } from "../../contracts/abi.js";
 import { Payout } from "../../Db/schema.js";
-const poolAddress = process.env.Contract_Address || "";
-const provider = new ethers.JsonRpcProvider(process.env.MONAD_TESTNET_RPC || "");
-const PRIVATE_KEY = process.env.PRIVATE_KEY || "";
-const signer = new ethers.Wallet(PRIVATE_KEY, provider);
-const poolContract = new ethers.Contract(poolAddress, PoolABI, signer);
+// Solana configuration
+const SOLANA_RPC_URL = process.env.SOLANA_RPC_URL || "https://api.devnet.solana.com";
+const CASINO_PROGRAM_ID = process.env.CASINO_PROGRAM_ID || "7eoY2tr9vaZEEjX1q64q3ovND5Erg9ZjK8CfujxDfh8p";
+const SOLANA_AUTHORITY_PRIVATE_KEY = process.env.SOLANA_AUTHORITY_PRIVATE_KEY || "";
+const connection = new Connection(SOLANA_RPC_URL);
+const programId = new PublicKey(CASINO_PROGRAM_ID);
+// Create authority keypair with error handling
+let authorityKeypair;
+try {
+    const privateKeyArray = JSON.parse(SOLANA_AUTHORITY_PRIVATE_KEY);
+    authorityKeypair = Keypair.fromSecretKey(new Uint8Array(privateKeyArray));
+}
+catch (error) {
+    console.error("Error parsing SOLANA_AUTHORITY_PRIVATE_KEY:", error);
+    throw new Error("Invalid SOLANA_AUTHORITY_PRIVATE_KEY format");
+}
+// Derive casino PDA
+const [casinoPda] = PublicKey.findProgramAddressSync([Buffer.from("casino"), authorityKeypair.publicKey.toBuffer()], programId);
 const WithdrawFundsRouter = Router();
 const withdrawFunds = async (req, res) => {
     const { walletAddress, amount } = req.body;
@@ -21,11 +33,14 @@ const withdrawFunds = async (req, res) => {
             message: "Invalid input: walletAddress and positive amount required"
         });
     }
-    // Validate wallet address format
-    if (!ethers.isAddress(walletAddress)) {
+    // Validate Solana wallet address format
+    try {
+        new PublicKey(walletAddress);
+    }
+    catch (error) {
         return res.status(400).json({
             success: false,
-            message: "Invalid wallet address format"
+            message: "Invalid Solana wallet address format"
         });
     }
     // Minimum withdrawal amount check
@@ -44,65 +59,65 @@ const withdrawFunds = async (req, res) => {
         }
         // Calculate total available balance (deposits + winnings)
         const totalAvailableBalance = (user.DepositBalance || 0) + (user.totalEarned || 0);
-        // Check contract balance before attempting withdrawal
-        const contractBalance = await poolContract.getBalance();
-        const amountInWei = ethers.parseEther(amount.toString());
-        logger.debug("[Withdraw] balance/req", { balance: ethers.formatEther(contractBalance), amount });
-        if (contractBalance < amountInWei) {
-            // Option: Allow partial withdrawal up to available balance
-            const maxWithdrawable = parseFloat(ethers.formatEther(contractBalance));
+        // Check casino balance before attempting withdrawal
+        const casinoBalance = await connection.getBalance(casinoPda);
+        const amountInLamports = Math.floor(amount * 1e9); // Convert SOL to lamports
+        logger.debug("[Withdraw] balance/req", { balance: casinoBalance / 1e9, amount });
+        if (casinoBalance < amountInLamports) {
+            const maxWithdrawable = casinoBalance / 1e9;
             return res.status(400).json({
                 success: false,
-                message: `Contract has insufficient funds. Available: ${ethers.formatEther(contractBalance)} ETH, Requested: ${amount} ETH`,
+                message: `Casino has insufficient funds. Available: ${casinoBalance / 1e9} SOL, Requested: ${amount} SOL`,
                 maxWithdrawable: maxWithdrawable
             });
         }
-        // Execute withdrawal transaction - send funds to user's wallet  
-        logger.debug("[Withdraw] calling payout", amountInWei.toString());
-        // Note: userWithdraw sends to msg.sender, so we need the user to call it
-        // For now, let's use payout (owner function) but we should track balances properly
-        const withdrawTx = await poolContract.payout(walletAddress, amountInWei);
-        logger.info("[Withdraw] tx sent", withdrawTx.hash);
-        const receipt = await withdrawTx.wait();
-        logger.info("[Withdraw] tx mined", receipt.hash || receipt.transactionHash || withdrawTx.hash);
-        // Use the transaction hash from withdrawTx if receipt doesn't have it
-        const txHash = receipt.hash || receipt.transactionHash || withdrawTx.hash;
-        if (receipt.status === 1) { // Transaction successful
-            // Calculate actual winnings (total withdrawal - original deposit)
-            const originalDeposit = user.DepositBalance || 0;
-            const actualWinnings = amount - originalDeposit;
-            logger.debug("[Withdraw] computed", { originalDeposit, amount, actualWinnings });
-            // Reset deposit balance and add only actual winnings to totalEarned
-            const updatedUser = await User.findOneAndUpdate({ walletAddress }, {
-                $set: {
-                    DepositBalance: 0 // Reset deposit balance to 0 (cashed out)
-                },
-                $inc: {
-                    roundsPlayed: 1,
-                    totalEarned: Math.max(0, actualWinnings) // Only add winnings, not deposit
-                }
-            }, { new: true });
-            // Track all the withdrawls: from contract to user address in payouts db
-            if (updatedUser == null)
-                return res.status(400).json({ success: false, message: "User not found" });
-            await Payout.create({ user: updatedUser._id, amount, txHash: txHash });
-            res.status(200).json({
-                success: true,
-                message: "Funds withdrawn successfully",
-                data: {
-                    withdrawnAmount: amount,
-                    remainingBalance: updatedUser?.DepositBalance || 0,
-                    transactionHash: txHash,
-                    blockNumber: receipt.blockNumber
-                }
-            });
+        // Execute withdrawal using direct Solana transfer from authority to user
+        logger.debug("[Withdraw] calling direct Solana transfer", amountInLamports);
+        // Transfer from authority account to user's wallet address
+        const transaction = new Transaction();
+        transaction.add(SystemProgram.transfer({
+            fromPubkey: authorityKeypair.publicKey,
+            toPubkey: new PublicKey(walletAddress), // Use user's wallet from request body
+            lamports: amountInLamports,
+        }));
+        // Sign and send transaction
+        const withdrawTx = await connection.sendTransaction(transaction, [authorityKeypair]);
+        logger.info("[Withdraw] tx sent", withdrawTx);
+        // Wait for confirmation
+        const confirmation = await connection.confirmTransaction(withdrawTx, 'confirmed');
+        if (confirmation.value.err) {
+            throw new Error(`Transaction failed: ${confirmation.value.err}`);
         }
-        else {
-            return res.status(400).json({
-                success: false,
-                message: "Withdrawal transaction failed"
-            });
-        }
+        logger.info("[Withdraw] tx confirmed", withdrawTx);
+        // Use the transaction hash
+        const txHash = withdrawTx;
+        // Calculate actual winnings (total withdrawal - original deposit)
+        const originalDeposit = user.DepositBalance || 0;
+        const actualWinnings = amount - originalDeposit;
+        logger.debug("[Withdraw] computed", { originalDeposit, amount, actualWinnings });
+        // Reset deposit balance and add only actual winnings to totalEarned
+        const updatedUser = await User.findOneAndUpdate({ walletAddress }, {
+            $set: {
+                DepositBalance: 0 // Reset deposit balance to 0 (cashed out)
+            },
+            $inc: {
+                roundsPlayed: 1,
+                totalEarned: Math.max(0, actualWinnings) // Only add winnings, not deposit
+            }
+        }, { new: true });
+        // Track all the withdrawals: from casino to user address in payouts db
+        if (updatedUser == null)
+            return res.status(400).json({ success: false, message: "User not found" });
+        await Payout.create({ user: updatedUser._id, amount, txHash: txHash });
+        res.status(200).json({
+            success: true,
+            message: "Funds withdrawn successfully",
+            data: {
+                withdrawnAmount: amount,
+                remainingBalance: updatedUser?.DepositBalance || 0,
+                transactionHash: txHash
+            }
+        });
     }
     catch (error) {
         logger.error("Withdrawal error:", error);
@@ -120,25 +135,26 @@ const withdrawFunds = async (req, res) => {
         });
     }
 };
-// Get contract info endpoint
+// Get casino info endpoint
 const getContractInfo = async (req, res) => {
     try {
-        const contractBalance = await poolContract.getBalance();
-        const contractBalanceETH = ethers.formatEther(contractBalance);
+        const casinoBalance = await connection.getBalance(casinoPda);
+        const casinoBalanceSOL = casinoBalance / 1e9;
         res.status(200).json({
             success: true,
             data: {
-                contractAddress: poolAddress,
-                contractBalance: contractBalanceETH,
-                contractBalanceWei: contractBalance.toString()
+                casinoAddress: casinoPda.toString(),
+                casinoBalance: casinoBalanceSOL,
+                casinoBalanceLamports: casinoBalance.toString(),
+                programId: programId.toString()
             }
         });
     }
     catch (error) {
-        logger.error("Contract info error:", error);
+        logger.error("Casino info error:", error);
         res.status(500).json({
             success: false,
-            message: "Failed to get contract info",
+            message: "Failed to get casino info",
             error: error.message
         });
     }

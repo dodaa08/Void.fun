@@ -1,1 +1,1 @@
-{"version":3,"file":"route.d.ts","sourceRoot":"","sources":["../../../src/routes/payouts/route.ts"],"names":[],"mappings":"AAIA,OAAO,EAAE,MAAM,EAAE,MAAM,QAAQ,CAAC;AAehC,eAAO,MAAM,YAAY,eAA2B,CAAC;AASrD,QAAA,MAAM,aAAa,4CAAW,CAAC;AA8F/B,eAAe,aAAa,CAAC"}
+{"version":3,"file":"route.d.ts","sourceRoot":"","sources":["../../../src/routes/payouts/route.ts"],"names":[],"mappings":"AAiCA,QAAA,MAAM,aAAa,4CAAW,CAAC;AA8H/B,eAAe,aAAa,CAAC"}

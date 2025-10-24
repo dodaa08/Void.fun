@@ -6,6 +6,7 @@
   "scripts": {
     "build": "npx tsc -b",
     "start": "node dist/index.js",
+    "start:solana": "./start.sh",
     "dev": "npm run build && nodemon dist/index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -14,6 +15,8 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@coral-xyz/anchor": "^0.30.1",
+    "@solana/web3.js": "^1.95.2",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.3",
     "@upstash/redis": "^1.35.4",
