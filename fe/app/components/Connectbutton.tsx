@@ -1,11 +1,11 @@
-import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 
 
 export default function Connectbutton() {
   return (
     <div className="flex items-center">
-      {/* <h1>Click bellow to connect your wallet with RainbowKit</h1> */}
-      <ConnectButton />
+      {/* <h1>Click below to connect your wallet with Solana</h1> */}
+      <WalletMultiButton />
     </div>
   );
 }

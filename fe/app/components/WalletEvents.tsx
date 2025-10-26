@@ -1,35 +1,43 @@
 'use client'
 import { useEffect, useRef } from 'react'
 import { useState } from 'react'
-// import { useAccount, useBalance } from 'wagmi'
-// import { createUser } from '@/app/services/api'
-import { useAccount, useBalance } from "wagmi";
+import { useConnection, useWallet } from '@solana/wallet-adapter-react';
+import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { createUser } from "../services/api";
 
 
 export default function WalletEvents() {
-  // const { address, isConnected } = useAccount()
-  const { address: walletAddress, isConnected } = useAccount();
+  const { publicKey, connected } = useWallet();
+  const { connection } = useConnection();
+  const walletAddress = publicKey?.toBase58();
   const last = useRef<string | null>(null)
-  const {data, isLoading} = useBalance({address: walletAddress})
-  const [userbalance, setUserbalance] = useState(0)
+  const [userBalance, setUserBalance] = useState<number | null>(null);
   const lastCreatedRef = useRef<string | null>(null);
 
 
   useEffect(() => {
-    if(isLoading){
-     console.log("Loading... userbalance")
-        return;
+    if (!connected || !publicKey) {
+      setUserBalance(null);
+      return;
     }
-    if(walletAddress && data){
-      setUserbalance(Number(data?.value))
-    }       
-  }, [walletAddress, data])
+    const fetchBalance = async () => {
+      try {
+        const lamports = await connection.getBalance(publicKey);
+        setUserBalance(lamports / LAMPORTS_PER_SOL);
+      } catch (error) {
+        console.error('Error fetching balance:', error);
+        setUserBalance(null);
+      }
+    };
+    fetchBalance();
+    const intervalId = setInterval(fetchBalance, 10000);
+    return () => clearInterval(intervalId);
+  }, [connected, publicKey, connection]);
 
   
 
   useEffect(() => {
-    if (!isConnected || !walletAddress) return;
+    if (!connected || !walletAddress) return;
     if (lastCreatedRef.current === walletAddress) return;
   
     let cancelled = false;
@@ -46,7 +54,7 @@ export default function WalletEvents() {
     })();
   
     return () => { cancelled = true; };
-  }, [isConnected, walletAddress]);
+  }, [connected, walletAddress]);
 
   return null
 }

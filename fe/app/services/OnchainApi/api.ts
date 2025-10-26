@@ -1,66 +1,31 @@
-import { ethers } from "ethers";
-import { PoolABI } from "@/app/contracts/abi";
 import axios from "axios";
 import { toast } from "react-toastify";
 
 
-const poolAddress = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || "";
-
-// Deposit funds using user's connected wallet
-export const DepositFunds = async (amount: number, signer: ethers.Signer) => {
-    if (!amount || amount <= 0) {
-        throw new Error("Amount must be greater than 0");
+// Deposit funds using user's connected Solana wallet
+export const DepositFunds = async (walletAddress: string, amount: number, signedTransaction: string) => {
+    if (!walletAddress || !amount || amount <= 0 || !signedTransaction) {
+        throw new Error("Missing required fields for deposit: walletAddress, amount, signedTransaction");
     }
-    
-    if (!signer) {
-        throw new Error("Wallet not connected");
-    }
-    
     try {
-        const poolContract = new ethers.Contract(poolAddress, PoolABI, signer);
-        
-        const depositTx = await poolContract.userDeposit({
-            value: ethers.parseEther(amount.toString()),
+        const backendResponse = await axios.post(`${process.env.NEXT_PUBLIC_BE_URL}/api/depositFunds/dp`, {
+            walletAddress,
+            amount,
+            signedTransaction
         });
-        
-        const receipt = await depositTx.wait();
-
-        // Get wallet address
-        const walletAddress = await signer.getAddress();
-        
-        const txHash = receipt?.hash || depositTx.hash;
-
-        if(txHash == null){
-            throw new Error("Transaction hash is null");
+        if (backendResponse.status !== 200) {
+            throw new Error("Failed to deposit funds via backend");
         }
-
-        let backendResponse = null;
-        if(txHash && txHash.length > 0 && walletAddress && amount){
-            backendResponse = await axios.post(`${process.env.NEXT_PUBLIC_BE_URL}/api/depositFunds/dp`, {
-                walletAddress: walletAddress,
-                amount: amount,
-                txHash: txHash
-            });
-            
-            if(backendResponse.status !== 200){
-                throw new Error("Failed to deposit funds");
-            }
-        }
-        if(backendResponse == null) return;
-
         return backendResponse;
     } catch (error: any) {
         console.error("DepositFunds error:", error);
-        
-        // If it's an axios error, log the response details
         if (error.response) {
-            console.error("Backend error:", error.response.status);
+            console.error("Backend error response:", error.response.status, error.response.data);
             throw new Error(`Backend error: ${error.response.data?.message || error.response.statusText}`);
         }
-        
         throw error;
     }
-}
+};
 
 
 export const FetchDepositFunds = async (walletAddress: string) => {
@@ -76,26 +41,29 @@ export const FetchDepositFunds = async (walletAddress: string) => {
 // Withdraw funds
 
 
-export const WithdrawFunds = async (amount: number, signer: ethers.Signer) => {
-    const walletAddress = await signer.getAddress();
-    try{
-        const backendResponse = await axios.post(`${process.env.NEXT_PUBLIC_BE_URL}/api/withdrawFunds/wd`, {
-            walletAddress: walletAddress,
-            amount: amount
-        });
-
-        if(backendResponse.status !== 200){
-            throw new Error("Failed to withdraw funds");
-        }
-
-        return backendResponse;
-
+export const WithdrawFunds = async (walletAddress: string, amount: number, signedTransaction: string) => {
+    if (!walletAddress || !amount || amount <= 0 || !signedTransaction) {
+        throw new Error("Missing required fields for withdrawal: walletAddress, amount, signedTransaction");
     }
-    catch(error: any){
+    try {
+        const backendResponse = await axios.post(`${process.env.NEXT_PUBLIC_BE_URL}/api/withdrawFunds/wd`, {
+            walletAddress,
+            amount,
+            signedTransaction
+        });
+        if (backendResponse.status !== 200) {
+            throw new Error("Failed to withdraw funds via backend");
+        }
+        return backendResponse;
+    } catch (error: any) {
         console.error("WithdrawFunds error:", error);
+        if (error.response) {
+            console.error("Backend error response:", error.response.status, error.response.data);
+            throw new Error(`Backend error: ${error.response.data?.message || error.response.statusText}`);
+        }
         throw error;
     }
-}
+};
 
 
 

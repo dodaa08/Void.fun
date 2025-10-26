@@ -1,1 +1,1 @@
-{"version":3,"file":"route.d.ts","sourceRoot":"","sources":["../../../src/routes/withdrawFunds/route.ts"],"names":[],"mappings":"AAgCA,QAAA,MAAM,mBAAmB,4CAAW,CAAC;AA6KrC,eAAe,mBAAmB,CAAC"}
+{"version":3,"file":"route.d.ts","sourceRoot":"","sources":["../../../src/routes/withdrawFunds/route.ts"],"names":[],"mappings":"AA8CA,QAAA,MAAM,mBAAmB,4CAAW,CAAC;AAiOrC,eAAe,mBAAmB,CAAC"}

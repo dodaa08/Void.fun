@@ -98,15 +98,15 @@ export const CachetheIncreasingPayoutAmount = async (req, res) => {
             }
             const finalPayout = await redisClient.get(key);
             const finalPayoutNum = finalPayout ? Number(finalPayout) : 0;
-            const FinalPayoutMon = finalPayoutNum / 150;
+            const FinalPayoutSol = finalPayoutNum / 150;
             if (finalPayoutNum > 0) {
                 await User.updateOne({ walletAddress: key }, {
                     $inc: {
-                        totalEarned: FinalPayoutMon,
-                        payouts: FinalPayoutMon
+                        totalEarned: FinalPayoutSol,
+                        payouts: FinalPayoutSol
                     }
                 });
-                console.log(`[WIN] User ${key} won ${FinalPayoutMon} MON (${finalPayoutNum} death points)`);
+                console.log(`[WIN] User ${key} won ${FinalPayoutSol.toFixed(4)} SOL (${finalPayoutNum} death points)`);
             }
             else {
                 await User.updateOne({ walletAddress: key }, {
@@ -114,7 +114,7 @@ export const CachetheIncreasingPayoutAmount = async (req, res) => {
                         payouts: 0
                     }
                 });
-                console.log(`[DEATH] User ${key} died - payout saved as 0`);
+                console.log(`[DEATH] User ${key} died - payout saved as 0 SOL`);
             }
             await redisClient.del(key);
             return res.status(200).json({

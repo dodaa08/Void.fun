@@ -22,16 +22,6 @@ pub mod casino_simple {
     pub fn deposit(ctx: Context<Deposit>, amount: u64) -> Result<()> {
         let user_account: &mut Account<'_, UserAccount> = &mut ctx.accounts.user_account;
         
-        // Initialize user account (it's created fresh each time)
-        user_account.user = ctx.accounts.user.key();
-        user_account.casino = ctx.accounts.casino.key();
-        user_account.balance = 0;
-        user_account.total_deposits = 0;
-        user_account.total_withdrawals = 0;
-        user_account.total_winnings = 0;
-        user_account.total_losses = 0;
-        user_account.bump = ctx.bumps.user_account;
-        
         // Transfer SOL from user to casino
         let cpi_context = CpiContext::new(
             ctx.accounts.system_program.to_account_info(),
@@ -145,6 +135,21 @@ pub mod casino_simple {
         msg!("User balance: {} lamports", user_balance);
         Ok(user_balance)
     }
+
+    // Initialize a user account for the casino
+    pub fn initialize_user_account(ctx: Context<InitializeUserAccount>) -> Result<()> {
+        let user_account = &mut ctx.accounts.user_account;
+        user_account.user = ctx.accounts.user.key();
+        user_account.casino = ctx.accounts.casino.key();
+        user_account.balance = 0;
+        user_account.total_deposits = 0;
+        user_account.total_withdrawals = 0;
+        user_account.total_winnings = 0;
+        user_account.total_losses = 0;
+        user_account.bump = ctx.bumps.user_account;
+        msg!("User account initialized for user: {}", user_account.user);
+        Ok(())
+    }
 }
 
 // Account structures
@@ -175,11 +180,10 @@ pub struct Deposit<'info> {
     pub casino: Account<'info, Casino>,
     
     #[account(
-        init,
-        payer = user,
-        space = 8 + UserAccount::INIT_SPACE,
+        mut,
+        has_one = user,
         seeds = [b"user", user.key().as_ref(), casino.key().as_ref()],
-        bump
+        bump = user_account.bump
     )]
     pub user_account: Account<'info, UserAccount>,
     
@@ -283,6 +287,29 @@ pub struct GetUserBalance<'info> {
     pub user_account: Account<'info, UserAccount>,
     
     pub user: SystemAccount<'info>,
+}
+
+#[derive(Accounts)]
+pub struct InitializeUserAccount<'info> {
+    #[account(
+        init,
+        payer = user,
+        space = 8 + UserAccount::INIT_SPACE,
+        seeds = [b"user", user.key().as_ref(), casino.key().as_ref()],
+        bump
+    )]
+    pub user_account: Account<'info, UserAccount>,
+
+    #[account(
+        seeds = [b"casino", casino.authority.as_ref()],
+        bump = casino.bump
+    )]
+    pub casino: Account<'info, Casino>,
+
+    #[account(mut)]
+    pub user: Signer<'info>,
+
+    pub system_program: Program<'info, System>,
 }
 
 // Data structures

@@ -1,221 +1,261 @@
 "use client"
 
-import { useState } from "react";
-import { useAccount, useWalletClient } from "wagmi";
-import { ethers } from "ethers";
-import { DepositFunds } from "../services/OnchainApi/api";
-import { toast } from "react-toastify";
-import { useBalance } from "wagmi";
-import { FetchDepositFunds } from "../services/OnchainApi/api";
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useConnection, useWallet, Wallet as AdapterWallet } from '@solana/wallet-adapter-react';
+import { PublicKey, SystemProgram, Transaction, LAMPORTS_PER_SOL } from '@solana/web3.js';
+import * as anchor from '@coral-xyz/anchor';
+import { Program, AnchorProvider, BN } from '@coral-xyz/anchor';
+import { toast } from 'react-toastify';
+import { DepositFunds } from '@/app/services/OnchainApi/api';
+import idl_raw from '../contracts/casino_simple.json'; // Ensure this path is correct
 
+// Custom Anchor Wallet class to wrap the wallet adapter
+class CustomAnchorWallet implements anchor.Wallet {
+  constructor(public wallet: AdapterWallet) {}
+
+  get publicKey(): PublicKey {
+    return this.wallet.adapter.publicKey!;
+  }
+
+  async signAllTransactions<T extends Transaction>(transactions: T[]): Promise<T[]> {
+    return this.wallet.adapter.signAllTransactions!(transactions);
+  }
+
+  async signTransaction<T extends Transaction>(transaction: T): Promise<T> {
+    return this.wallet.adapter.signTransaction!(transaction);
+  }
+}
 
 interface DepositDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onDepositSuccess?: (depositAmount: number) => void;
+  onDepositSuccess: (amount: number) => void;
 }
 
-const DepositDialog = ({ isOpen, onClose, onDepositSuccess }: DepositDialogProps) => {
-  const [amount, setAmount] = useState("");
+const DepositDialog: React.FC<DepositDialogProps> = ({ isOpen, onClose, onDepositSuccess }) => {
+  const { connection } = useConnection();
+  const { publicKey, wallet, connected, signTransaction } = useWallet();
+  const [amount, setAmount] = useState<number>(0.01); // Default to minimum deposit
   const [isLoading, setIsLoading] = useState(false);
-  const { address } = useAccount();
-  const { data: walletClient } = useWalletClient();
+  const [isAccountInitializing, setIsAccountInitializing] = useState(false);
+  const [idlError, setIdlError] = useState<string | null>(null);
+  const programId = new PublicKey(process.env.NEXT_PUBLIC_CASINO_PROGRAM_ID!); // Moved inside the component
 
-  const { data: balance } = useBalance({address: address});
+  const idl: anchor.Idl = idl_raw as anchor.Idl;
 
-
-
-
-  const handleDeposit = async () => {
-    if (!amount || parseFloat(amount) <= 0) {
-      toast.error("Please enter a valid amount");
+  const checkAndInitializeAccounts = useCallback(async () => {
+    if (!publicKey || !connected || !idl) {
       return;
     }
 
-    if (!walletClient || !address) {
-      toast.error("Please connect your wallet");
-      return;
-    }
-
+    setIsAccountInitializing(true);
     try {
+      const provider = new AnchorProvider(connection, new CustomAnchorWallet(wallet!), AnchorProvider.defaultOptions());
+      const program = new Program(idl, provider);
 
-      if(balance && parseFloat(balance.formatted) < parseFloat(amount)){
-        toast.error("You don't have enough balance to deposit");
+      const [casinoPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("casino"), new PublicKey(process.env.NEXT_PUBLIC_AUTHORITY_ADDRESS!).toBuffer()],
+        programId
+      );
+
+      const [userAccountPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("user"), publicKey.toBuffer(), casinoPda.toBuffer()],
+        programId
+      );
+
+      // 1. Check and initialize Casino PDA if it doesn't exist
+      try {
+        await program.account.casino.fetch(casinoPda);
+      } catch (e) {
+        console.warn("Casino PDA not found.");
+        toast.error("Casino account not initialized. Please ensure the casino is deployed and initialized by the authority.");
+        setIsAccountInitializing(false);
+        onClose(); // Close dialog on critical error
         return;
       }
 
-      setIsLoading(true);
+      // 2. Check and initialize User Account PDA if it doesn't exist
+      try {
+        await program.account.userAccount.fetch(userAccountPda);
+      } catch (e) {
+        console.warn("User account PDA not found, attempting to initialize...");
+        const initializeUserAccountIx = await program.methods
+          .initializeUserAccount()
+          .accounts({
+            userAccount: userAccountPda,
+            user: publicKey,
+            casino: casinoPda,
+            systemProgram: SystemProgram.programId,
+          })
+          .instruction();
 
-      // Note: We can't check balance here without fetching it first
-      // The wallet address doesn't contain balance information
-      // Balance checking would need to be done separately if needed
-      
-      // Convert wagmi client to ethers signer
-      const provider = new ethers.BrowserProvider(walletClient);
-      const signer = await provider.getSigner();
-      
-      const depositAmount = parseFloat(amount);
-      const txhash = await DepositFunds(depositAmount, signer);
-      console.log("txhash", txhash);
-      
+        const initializeUserAccountTx = new Transaction().add(initializeUserAccountIx);
+        initializeUserAccountTx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+        initializeUserAccountTx.feePayer = publicKey; // User pays for their account initialization
 
-      const EXPLORER_BASE ="https://testnet.monadexplorer.com/tx/";
+        const signedInitializeUserAccountTx = await signTransaction!(initializeUserAccountTx);
 
-      const copy = async () => {
-        await navigator.clipboard.writeText(txhash?.data?.transactionHash);
-        toast.success("TX hash copied", { autoClose: 2000 });
-      };
-      toast.success(
-        <div className="text-sm">
-          <div className="font-semibold">
-            Deposit successful {amount} MON!
-          </div>
-          <div className="mt-1 font-mono break-all">{txhash?.data?.transactionHash}</div>
-          <div className="mt-2 flex gap-2">
-            <button
-              onClick={copy}
-              className="px-2 py-1 rounded bg-gray-700 text-white hover:bg-gray-600"
-            >
-              Copy
-            </button>
-            {txhash?.data?.transactionHash && (
-              <a
-                href={`${EXPLORER_BASE}${txhash?.data?.transactionHash}`}
-                target="_blank"
-                rel="noreferrer"
-                className="px-2 py-1 rounded bg-lime-400 text-black hover:bg-lime-300"
-              >
-                View
-              </a>
-            )}
-          </div>
-        </div>,
-        { autoClose: 12000 }
+        const txid = await connection.sendRawTransaction(signedInitializeUserAccountTx.serialize());
+        await connection.confirmTransaction(txid, 'confirmed');
+        toast.success("User account initialized!");
+      }
+    } catch (error: any) {
+      console.error("Error checking/initializing accounts:", error);
+      toast.error(`Failed to initialize accounts: ${error.message || error}`);
+      onClose(); // Close dialog on critical error
+    } finally {
+      setIsAccountInitializing(false);
+    }
+  }, [publicKey, connected, connection, wallet, idl, signTransaction, onClose]);
+
+  useEffect(() => {
+    if (isOpen && connected && publicKey && idl) {
+      checkAndInitializeAccounts();
+    }
+  }, [isOpen, connected, publicKey, idl, checkAndInitializeAccounts]);
+
+  const handleDeposit = async () => {
+    if (!publicKey || !connected || !idl) {
+      toast.error("Please connect your Solana wallet.");
+      return;
+    }
+    if (amount <= 0) {
+      toast.error("Deposit amount must be greater than 0.");
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const provider = new AnchorProvider(connection, new CustomAnchorWallet(wallet!), AnchorProvider.defaultOptions());
+      const program = new Program(idl, provider);
+
+      const [casinoPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("casino"), new PublicKey(process.env.NEXT_PUBLIC_AUTHORITY_ADDRESS!).toBuffer()],
+        programId
       );
+
+      const [userAccountPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("user"), publicKey.toBuffer(), casinoPda.toBuffer()],
+        programId
+      );
+
+      // Fetch user's current SOL balance
+      const userSolBalance = await connection.getBalance(publicKey);
+      const amountInLamports = new BN(amount * LAMPORTS_PER_SOL);
+
+      if (userSolBalance < amountInLamports.toNumber()) {
+        toast.error(`Insufficient SOL in wallet. You have ${userSolBalance / LAMPORTS_PER_SOL} SOL.`);
+        setIsLoading(false);
+        return;
+      }
       
+      const depositInstruction = await program.methods
+        .deposit(amountInLamports)
+        .accounts({
+          casino: casinoPda,
+          userAccount: userAccountPda,
+          user: publicKey,
+          systemProgram: SystemProgram.programId,
+        })
+        .instruction();
+
+      const transaction = new Transaction().add(depositInstruction);
+      transaction.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+      transaction.feePayer = publicKey;
+
+      // Simulate the transaction before sending
+      console.log("Simulating deposit transaction...");
+      const simulationResult = await connection.simulateTransaction(transaction);
+      if (simulationResult.value.err) {
+        console.error("Deposit transaction simulation failed:", simulationResult.value.err);
+        if (simulationResult.value.logs) {
+            console.error("Simulation logs:", simulationResult.value.logs);
+        }
+        throw new Error(`Deposit simulation failed: ${JSON.stringify(simulationResult.value.err)}`);
+      }
+      console.log("Deposit transaction simulation successful.");
+
+      const signedTransactionFromWallet = await signTransaction!(transaction);
+      const serializedTransaction = signedTransactionFromWallet.serialize({ requireAllSignatures: false, verifySignatures: false }).toString('base64');
       
-      // toast.success(`Successfully deposited ${amount} ETH! ${txhash}`);
-      setAmount("");
-      onClose();
-      
-      // Start monitoring the deposit in the parent component
-      if (onDepositSuccess) {
-        console.log("[DepositDialog] Starting deposit monitoring for amount:", depositAmount);
-        onDepositSuccess(depositAmount);
+      const response = await DepositFunds(publicKey.toBase58(), amount, serializedTransaction);
+
+      if (response.status === 200) {
+        toast.success("Deposit successful!");
+        onDepositSuccess(amount);
+        onClose();
+      } else {
+        toast.error(response.data?.message || "Deposit failed.");
       }
     } catch (error: any) {
       console.error("Deposit error:", error);
-      toast.error(error.message || "Deposit failed");
+      if (error?.code === 4001 || error?.message?.includes("user denied") || error?.message?.includes("User rejected")) {
+        toast.error("Deposit transaction rejected. Please confirm the transaction in your wallet to proceed.");
+      } else if (error.message.includes("custom program error: 0x11be")) {
+        toast.error("Deposit failed: Insufficient funds in the casino's treasury. Please contact support.");
+      }
+       else {
+        toast.error(`Deposit failed: ${error.message || "Unknown error"}`);
+      }
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const handleClose = () => {
-    if (!isLoading) {
-      setAmount("");
-      onClose();
     }
   };
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      {/* Backdrop */}
-      <div 
-        className="absolute inset-0 bg-black/80 backdrop-blur-sm"
-        onClick={handleClose}
-      />
-      
-      {/* Dialog */}
-      <div className="relative w-full max-w-md mx-4 bg-[#0f172a]/95 border border-gray-800/60 rounded-2xl p-6 shadow-2xl">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-bold text-white">Add Funds</h2>
-          <button
-            onClick={handleClose}
-            disabled={isLoading}
-            className="text-gray-400 hover:text-white transition-colors p-1 disabled:opacity-50"
-          >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-[#0b1206] border border-gray-800 p-8 rounded-lg shadow-lg w-full max-w-md">
+        <h2 className="text-2xl font-bold text-lime-400 mb-6 text-center">Deposit Funds</h2>
+        {isAccountInitializing ? (
+          <div className="flex flex-col items-center justify-center py-10">
+            <svg className="animate-spin h-8 w-8 text-lime-400 mb-4" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
-          </button>
-        </div>
-
-        {/* Amount Input */}
-        <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-300 mb-2">
-            Amount (ETH)
-          </label>
-          <div className="relative">
-            <input
-              type="number"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              placeholder="0.00"
-              step="0.0001"
-              min="0"
-              disabled={isLoading}
-              className="w-full px-4 py-3 bg-[#121a29] border border-gray-700/60 rounded-md text-white placeholder-gray-500 focus:outline-none  transition-colors disabled:opacity-50"
-            />
-            {/* <span className="absolute right-3 top-3 text-gray-400 text-sm"></span> */}
+            <p className="text-white">Initializing your casino accounts...</p>
           </div>
-        </div>
-
-        {/* Quick Amount Buttons */}
-        <div className="mb-6">
-          <p className="text-sm text-gray-400 mb-3">Quick amounts:</p>
-          <div className="grid grid-cols-4 gap-2">
-            {["0.01", "0.05", "0.1", "0.5"].map((quickAmount) => (
-              <button
-                key={quickAmount}
-                onClick={() => setAmount(quickAmount)}
+        ) : (
+          <>
+            <div className="mb-4">
+              <label htmlFor="amount" className="block text-gray-300 text-sm font-bold mb-2">
+                Amount (SOL):
+              </label>
+              <input
+                type="number"
+                id="amount"
+                className="shadow appearance-none border border-gray-700 rounded w-full py-2 px-3 text-white leading-tight focus:outline-none focus:shadow-outline bg-gray-900"
+                value={amount}
+                onChange={(e) => setAmount(parseFloat(e.target.value))}
+                min="0.001"
+                step="0.001"
                 disabled={isLoading}
-                className="px-3 py-2 bg-[#121a29] border border-gray-700/60 rounded-md text-white text-sm hover:border-emerald-500 transition-colors disabled:opacity-50 cursor-pointer"
+              />
+            </div>
+            <div className="flex justify-between mt-6">
+              <button
+                onClick={onClose}
+                className="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+                disabled={isLoading}
               >
-                {quickAmount}
+                Cancel
               </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Buttons */}
-        <div className="flex gap-3">
-          <button
-            onClick={handleClose}
-            disabled={isLoading}
-            className="flex-1 px-4 py-3 bg-gray-700 text-white rounded-md hover:bg-gray-600 transition-colors disabled:opacity-50"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleDeposit}
-            disabled={isLoading || !amount || parseFloat(amount) <= 0}
-            className="flex-1 px-4 py-3 bg-lime-400 text-black font-bold rounded-md hover:bg-lime-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-          >
-            {isLoading ? (
-              <>
-                <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-black" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                Depositing...
-              </>
-            ) : (
-              "Deposit"
-            )}
-          </button>
-        </div>
-
-        {/* Wallet Info */}
-        {address && (
-          <div className="mt-4 pt-4 border-t border-gray-700/60">
-            <p className="text-xs text-gray-400">
-              Connected: {address.slice(0, 6)}...{address.slice(-4)}
-            </p>
-          </div>
+              <button
+                onClick={handleDeposit}
+                className="bg-lime-500 hover:bg-lime-600 text-black font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline flex items-center justify-center"
+                disabled={!connected || isLoading}
+              >
+                {isLoading ? (
+                  <svg className="animate-spin h-5 w-5 text-black mr-3" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                ) : null}
+                {isLoading ? "Depositing..." : "Deposit"}
+              </button>
+            </div>
+          </>
         )}
       </div>
     </div>

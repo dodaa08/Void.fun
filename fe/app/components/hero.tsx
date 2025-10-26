@@ -5,16 +5,16 @@ import Bottombar from "./bottombar";
 import Leaderboard from "./leaderboard";
 import { useGame } from "../store/useGame";
 import { useEffect } from "react";
-import { useAccount } from "wagmi";
+import { useWallet } from '@solana/wallet-adapter-react';
 
 const Hero = ()=>{
     const { start } = useGame();
-    const { address: walletAddress } = useAccount();
+    const { publicKey } = useWallet();
 
 
     useEffect(() => {
         // Removed auto setSessionId on wallet connect to preserve session across reloads
-    }, [walletAddress]);
+    }, [publicKey]);
     
     return(
         <>

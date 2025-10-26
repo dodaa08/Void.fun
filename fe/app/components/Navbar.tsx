@@ -2,13 +2,14 @@
 
 import { useState } from "react";
 import Connectbutton from "./Connectbutton";
-import { useAccount } from "wagmi";
+import { useWallet } from '@solana/wallet-adapter-react';
 import { getTotalEarnings } from "../services/api";
 import { useEffect } from "react";
 
 
 const Navbar = () => {
-  const { address } = useAccount();
+  const { publicKey } = useWallet();
+  const address = publicKey?.toBase58(); // Derive address from publicKey
   const [isReferralDialogOpen, setIsReferralDialogOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [totalEarnings, setTotalEarnings] = useState(0);
@@ -26,7 +27,7 @@ const Navbar = () => {
   const handleGenerateLink = () => {
     // Placeholder for generating referral link
     if (address) {
-      return `https://casino-onchain-monad.vercel.app/referral?ref=${address}`;
+      return `https://your-solana-frontend-url.com/referral?ref=${address}`;
     }
     return "";
   };

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { useAccount } from "wagmi";
+import { useWallet } from '@solana/wallet-adapter-react';
 import Connectbutton from "../../components/Connectbutton";
 import { ConnectWallet } from "@/app/services/api";
 import { toast } from "react-toastify";
@@ -12,7 +12,8 @@ import { toast } from "react-toastify";
 const ReferralPageContent = () => {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const { address, isConnected } = useAccount();
+  const { publicKey, connected } = useWallet();
+  const address = publicKey?.toBase58(); // Derive address from publicKey
   const referrer = searchParams.get("ref") || "";
   const [isLoading, setIsLoading] = useState(false);
 
@@ -23,7 +24,7 @@ const ReferralPageContent = () => {
   }, [referrer]);
 
   useEffect(() => {
-    if (isConnected && address) {
+    if (connected && address) {
       const storedReferrer = localStorage.getItem("referrer") || "";
       if (storedReferrer) {
         sendReferralData(address, storedReferrer);
@@ -33,7 +34,7 @@ const ReferralPageContent = () => {
         }, 1000);
       }
     }
-  }, [isConnected, address, router]);
+  }, [connected, address, router]);
 
   const sendReferralData = async (walletAddress: string, referrer: string) => {
     setIsLoading(true);

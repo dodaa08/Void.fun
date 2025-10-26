@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useCallback, memo } from "react";
 import { useGame } from "../store/useGame";
-import { useAccount } from "wagmi";
+import { useWallet } from '@solana/wallet-adapter-react';
 import { getSessionState, getLastSessionId, GetDeathIndex } from "@/app/services/api";
 import deathtile from "../../public/death-skull.svg";
 
@@ -16,7 +16,7 @@ type BoardRow = {
 const TileBoard = ()=>{
 	const [rows, setRows] = useState<BoardRow[]>([]);
 	const { isPlaying, selectTile, endRound, sessionId, rehydrate, setSessionId, Replay, setReplay, shuffleBoard, setShuffleBoard } = useGame();
-	const { address: walletAddress } = useAccount();
+	const { publicKey } = useWallet();
 	const [activeRow, setActiveRow] = useState(0);
 	const [clickedByRow, setClickedByRow] = useState<Record<number, boolean>>({});
 	const [clickedTileIndex, setClickedTileIndex] = useState<Record<number, number>>({}); // row -> clicked tile index
@@ -74,11 +74,11 @@ const TileBoard = ()=>{
 
 	// If sessionId is empty on reload, fetch the last session for this wallet
 	useEffect(() => {
-		if (sessionId || !walletAddress || fetchedLastSessionRef.current) return;
+		if (sessionId || !publicKey || fetchedLastSessionRef.current) return;
 		let cancelled = false;
 		(async () => {
 			try {
-				const res = await getLastSessionId(walletAddress);
+				const res = await getLastSessionId(publicKey.toBase58());
 				if (cancelled) return;
 				const last = res?.sessionId ?? res?.lastSessionId ?? null;
 				if (last) {
@@ -90,7 +90,7 @@ const TileBoard = ()=>{
 			}
 		})();
 		return () => { cancelled = true };
-	}, [sessionId, walletAddress, setSessionId]);
+	}, [sessionId, publicKey, setSessionId]);
 
 	// Rehydrate from backend cache when session and rows are ready
 	useEffect(() => {
@@ -150,7 +150,7 @@ const TileBoard = ()=>{
 	}
 
 	const handleTileClick = useCallback(async (visualIdx: number, clickedTileIdx: number)=>{
-		if(!walletAddress || !isPlaying) return;
+		if(!publicKey || !isPlaying) return;
 		if (visualIdx !== activeRow || clickedByRow[visualIdx]) return; // only current row once
 		
 		// Prevent multiple simultaneous clicks
@@ -194,7 +194,7 @@ const TileBoard = ()=>{
 		setDeathTiles(prev => ({ ...prev, [visualIdx]: deathIdx }))
 		
 		const rowMult = rows[actualIdx]?.multiplier ?? 1;
-        await selectTile(actualIdx, clickedTileIdx, walletAddress, isDeath, rowMult);
+        await selectTile(actualIdx, clickedTileIdx, publicKey.toBase58(), isDeath, rowMult);
 		// await selectTile(actualIdx, clickedTileIdx, walletAddress, isDeath);
 		
 		if(isDeath){
@@ -215,7 +215,7 @@ const TileBoard = ()=>{
 				isProcessingClickRef.current = false;
 			}, 300);
 		}
-	}, [walletAddress, isPlaying, activeRow, clickedByRow, sessionId, rows, selectTile, endRound, setSessionId]);
+	}, [publicKey, isPlaying, activeRow, clickedByRow, sessionId, rows, selectTile, endRound, setSessionId]);
 
 
 
