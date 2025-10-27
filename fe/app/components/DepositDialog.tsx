@@ -1,8 +1,8 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { useConnection, useWallet, Wallet as AdapterWallet } from '@solana/wallet-adapter-react';
-import { PublicKey, SystemProgram, Transaction, LAMPORTS_PER_SOL } from '@solana/web3.js';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useConnection, useWallet } from '@solana/wallet-adapter-react';
+import { PublicKey, SystemProgram, Transaction, LAMPORTS_PER_SOL, Keypair, VersionedTransaction } from '@solana/web3.js';
 import * as anchor from '@coral-xyz/anchor';
 import { Program, AnchorProvider, BN } from '@coral-xyz/anchor';
 import { toast } from 'react-toastify';
@@ -12,19 +12,12 @@ import { Buffer } from 'buffer'; // Re-add Buffer import
 
 // Custom Anchor Wallet class to wrap the wallet adapter
 class CustomAnchorWallet implements anchor.Wallet {
-  constructor(public wallet: AdapterWallet) {}
-
-  get publicKey(): PublicKey {
-    return this.wallet.adapter.publicKey!;
-  }
-
-  async signAllTransactions<T extends (Transaction | VersionedTransaction)>(transactions: T[]): Promise<T[]> {
-    return this.wallet.adapter.signAllTransactions!(transactions);
-  }
-
-  async signTransaction<T extends (Transaction | VersionedTransaction)>(transaction: T): Promise<T> {
-    return this.wallet.adapter.signTransaction!(transaction);
-  }
+  constructor(
+    public publicKey: PublicKey,
+    public signTransaction: <T extends Transaction | VersionedTransaction>(tx: T) => Promise<T>,
+    public signAllTransactions: <T extends Transaction | VersionedTransaction>(txs: T[]) => Promise<T[]>,
+    public payer: Keypair = new Keypair()
+  ) {}
 }
 
 interface DepositDialogProps {
@@ -35,24 +28,43 @@ interface DepositDialogProps {
 
 const DepositDialog: React.FC<DepositDialogProps> = ({ isOpen, onClose, onDepositSuccess }) => {
   const { connection } = useConnection();
-  const { publicKey, wallet, connected, signTransaction } = useWallet();
+  const { publicKey, connected, signTransaction, signAllTransactions } = useWallet();
   const [amount, setAmount] = useState<number>(0.01); // Default to minimum deposit
   const [isLoading, setIsLoading] = useState(false);
   const [isAccountInitializing, setIsAccountInitializing] = useState(false);
   const [idlError, setIdlError] = useState<string | null>(null);
-  const programId = new PublicKey(process.env.NEXT_PUBLIC_CASINO_PROGRAM_ID!); // Moved inside the component
-
   const idl: anchor.Idl = idl_raw as anchor.Idl;
 
-  const checkAndInitializeAccounts = useCallback(async () => {
+  // Centralized program and provider instantiation
+  const { provider, program } = useMemo(() => {
     if (!publicKey || !connected || !idl) {
+      return { provider: null, program: null };
+    }
+
+    const programId = new PublicKey(process.env.NEXT_PUBLIC_CASINO_PROGRAM_ID!);
+    const walletAdapter = new CustomAnchorWallet(
+      publicKey,
+      signTransaction!,
+      (signAllTransactions || (async (txs: any[]) => {
+        console.warn("Wallet does not support signAllTransactions, returning unsigned transactions.");
+        return txs; // Return transactions as is (unsigned)
+      })) as <T extends Transaction | VersionedTransaction>(txs: T[]) => Promise<T[]>,
+    );
+
+    const provider = new AnchorProvider(connection, walletAdapter, AnchorProvider.defaultOptions());
+    const program = new Program(idl, provider) as any;
+
+    return { provider, program };
+  }, [publicKey, connected, idl, connection, signTransaction, signAllTransactions]);
+
+  const checkAndInitializeAccounts = useCallback(async () => {
+    if (!publicKey || !connected || !idl || !program || !provider) {
       return;
     }
 
     setIsAccountInitializing(true);
     try {
-      const provider = new AnchorProvider(connection, new CustomAnchorWallet(wallet!), AnchorProvider.defaultOptions());
-      const program = new Program(idl, provider);
+      const programId = program.programId;
 
       const [casinoPda] = PublicKey.findProgramAddressSync(
         [Buffer.from("casino"), new PublicKey(process.env.NEXT_PUBLIC_AUTHORITY_ADDRESS!).toBuffer()],
@@ -107,7 +119,7 @@ const DepositDialog: React.FC<DepositDialogProps> = ({ isOpen, onClose, onDeposi
     } finally {
       setIsAccountInitializing(false);
     }
-  }, [publicKey, connected, connection, wallet, idl, signTransaction, onClose]);
+  }, [publicKey, connected, program, provider, onClose]);
 
   useEffect(() => {
     if (isOpen && connected && publicKey && idl) {
@@ -116,7 +128,7 @@ const DepositDialog: React.FC<DepositDialogProps> = ({ isOpen, onClose, onDeposi
   }, [isOpen, connected, publicKey, idl, checkAndInitializeAccounts]);
 
   const handleDeposit = async () => {
-    if (!publicKey || !connected || !idl) {
+    if (!publicKey || !connected || !idl || !program || !provider) {
       toast.error("Please connect your Solana wallet.");
       return;
     }
@@ -127,8 +139,7 @@ const DepositDialog: React.FC<DepositDialogProps> = ({ isOpen, onClose, onDeposi
 
     setIsLoading(true);
     try {
-      const provider = new AnchorProvider(connection, new CustomAnchorWallet(wallet!), AnchorProvider.defaultOptions());
-      const program = new Program(idl, provider);
+      const programId = program.programId;
 
       const [casinoPda] = PublicKey.findProgramAddressSync(
         [Buffer.from("casino"), new PublicKey(process.env.NEXT_PUBLIC_AUTHORITY_ADDRESS!).toBuffer()],
@@ -203,10 +214,10 @@ const DepositDialog: React.FC<DepositDialogProps> = ({ isOpen, onClose, onDeposi
         const explorerUrl = `https://explorer.solana.com/tx/${txHash}?cluster=devnet`;
 
         toast.success(
-          <div className="flex flex-col items-start">
-            <span>Deposit successful {amount} SOL!</span>
+          <div className="flex flex-col items-start bg-black/80 p-3 rounded">
+            <span className="text-gray-800">Deposit successful {amount} SOL!</span>
             {txHash && (
-              <p className="font-mono text-xs text-black break-all mt-1">
+              <p className="font-mono text-xs text-gray-800 break-all mt-1">
                 {txHash}
               </p>
             )}

@@ -11,30 +11,23 @@ import { useGame } from "../store/useGame";
   import { getReferredUser, getSession } from "@/app/services/api";
   import { ReferralRewardPayout } from "../services/OnchainApi/api";
 import { useConnection, useWallet, Wallet as AdapterWallet } from '@solana/wallet-adapter-react';
-import { PublicKey, SystemProgram, LAMPORTS_PER_SOL, Transaction } from '@solana/web3.js';
+import { PublicKey, SystemProgram, LAMPORTS_PER_SOL, Transaction, Keypair, VersionedTransaction } from '@solana/web3.js';
 import { Program, AnchorProvider, BN } from '@coral-xyz/anchor';
 import * as anchor from '@coral-xyz/anchor';
 import idl_raw from '../contracts/casino_simple.json'; // Corrected path to IDL
 
 // Custom Anchor Wallet class to wrap the wallet adapter
 class CustomAnchorWallet implements anchor.Wallet {
-  constructor(public wallet: AdapterWallet) {}
-
-  get publicKey(): PublicKey {
-    return this.wallet.adapter.publicKey!;
-  }
-
-  async signAllTransactions<T extends (Transaction | VersionedTransaction)>(transactions: T[]): Promise<T[]> {
-    return this.wallet.adapter.signAllTransactions!(transactions);
-  }
-
-  async signTransaction<T extends (Transaction | VersionedTransaction)>(transaction: T): Promise<T> {
-    return this.wallet.adapter.signTransaction!(transaction);
-  }
+  constructor(
+    public publicKey: PublicKey,
+    public signTransaction: <T extends Transaction | VersionedTransaction>(tx: T) => Promise<T>,
+    public signAllTransactions: <T extends Transaction | VersionedTransaction>(txs: T[]) => Promise<T[]>,
+    public payer: Keypair = new Keypair()
+  ) {}
 }
 
 const BottomBar = ()=>{
-  const { publicKey, wallet, connected, sendTransaction, signTransaction } = useWallet();
+  const { publicKey, wallet, connected, sendTransaction, signTransaction, signAllTransactions } = useWallet();
   const { connection } = useConnection();
   const programId = new PublicKey(process.env.NEXT_PUBLIC_CASINO_PROGRAM_ID!); // Moved inside the component
   const walletAddress = publicKey?.toBase58(); // Derive walletAddress from publicKey
@@ -447,7 +440,11 @@ const BottomBar = ()=>{
       }
       toast.info("Processing withdrawal...");
 
-      const provider = new AnchorProvider(connection, new CustomAnchorWallet(wallet), AnchorProvider.defaultOptions());
+      const provider = new AnchorProvider(connection, new CustomAnchorWallet(
+        publicKey!,
+        signTransaction!,
+        (signAllTransactions || (async (txs: any[]) => txs)) as <T extends Transaction | VersionedTransaction>(txs: T[]) => Promise<T[]>
+      ), AnchorProvider.defaultOptions());
       const program = new Program(idl_raw as anchor.Idl, provider);
       const [casinoPda] = PublicKey.findProgramAddressSync(
         [Buffer.from("casino"), new PublicKey(process.env.NEXT_PUBLIC_AUTHORITY_ADDRESS!).toBuffer()],
@@ -469,7 +466,7 @@ const BottomBar = ()=>{
         .instruction();
       const transaction = new Transaction().add(withdrawInstruction);
       transaction.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
-      transaction.feeFayer = publicKey;
+      transaction.feePayer = publicKey;
       console.log("Simulating withdrawal transaction...");
       const simulationResult = await connection.simulateTransaction(transaction);
       if (simulationResult.value.err) {
@@ -480,7 +477,7 @@ const BottomBar = ()=>{
         throw new Error(`Withdrawal simulation failed: ${JSON.stringify(simulationResult.value.err)}`);
       }
       console.log("Withdrawal transaction simulation successful.");
-      const signedTransactionFromWallet = await signTransaction(transaction);
+      const signedTransactionFromWallet = await signTransaction!(transaction);
       const serializedTransaction = signedTransactionFromWallet.serialize({ requireAllSignatures: false, verifySignatures: false }).toString('base64');
       const response = await WithdrawFunds(publicKey.toBase58(), adjustedWithdrawableSOL, serializedTransaction);
       if (response.status === 200) {
