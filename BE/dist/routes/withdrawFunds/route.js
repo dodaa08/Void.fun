@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { User } from "../../Db/schema.js";
-import { Connection, PublicKey, Keypair, Transaction, LAMPORTS_PER_SOL, sendAndConfirmTransaction } from "@solana/web3.js"; // Added sendAndConfirmTransaction
+import { Connection, PublicKey, Keypair, LAMPORTS_PER_SOL } from "@solana/web3.js"; // Added sendAndConfirmTransaction
 import * as anchor from "@coral-xyz/anchor"; // Uncommented
 import idl_raw from "../../contracts/casino_simple.json" with { type: "json" }; // Renamed to avoid conflict
 const idl = idl_raw; // Explicitly type idl
@@ -90,50 +90,29 @@ const withdrawFunds = async (req, res) => {
             });
         }
         logger.debug("[Withdraw] receiving and signing transaction");
-        // Deserialize the partially signed transaction from the frontend
-        const transaction = Transaction.from(Buffer.from(signedTransaction, 'base64'));
-        // Verify the instruction and accounts (similar to deposit, but for withdraw)
-        const expectedProgramId = program.programId;
-        const instruction = transaction.instructions[0]; // Assuming the withdraw instruction is the first one
-        if (!instruction || !instruction.programId.equals(expectedProgramId)) {
-            logger.warn("[Withdraw] Transaction does not contain expected program instruction");
-            return res.status(400).json({ success: false, message: "Invalid transaction: Program instruction mismatch" });
-        }
-        const expectedUserPubkey = new PublicKey(walletAddress);
-        const [userAccountPda] = PublicKey.findProgramAddressSync([Buffer.from("user"), expectedUserPubkey.toBuffer(), casinoPda.toBuffer()], programId);
-        const accountMetaPubkeys = instruction.keys.map(key => key.pubkey.toBase58());
-        if (!accountMetaPubkeys.includes(expectedUserPubkey.toBase58())) {
-            logger.warn("[Withdraw] User not found in transaction accounts");
-            return res.status(400).json({ success: false, message: "User account mismatch in transaction" });
-        }
-        if (!accountMetaPubkeys.includes(userAccountPda.toBase58())) {
-            logger.warn("[Withdraw] User account PDA not found in transaction accounts");
-            return res.status(400).json({ success: false, message: "User PDA account mismatch in transaction" });
-        }
-        if (!accountMetaPubkeys.includes(casinoPda.toBase58())) {
-            logger.warn("[Withdraw] Casino PDA not found in transaction accounts");
-            return res.status(400).json({ success: false, message: "Casino PDA account mismatch in transaction" });
-        }
-        // For withdraw, the user has already signed the transaction
-        // We don't need to add authority signature since authority is not part of withdraw instruction
-        // Send the transaction as-is
-        let withdrawalTx;
+        // The frontend now sends a fully signed, serialized transaction.
+        // The backend simply relays it and uses lastValidBlockHeight for confirmation.
+        logger.debug("[Withdraw] Received serialized transaction from frontend. Sending directly.");
+        const rawTransaction = Buffer.from(signedTransaction, 'base64');
+        const { blockhash, lastValidBlockHeight: backendLastValidBlockHeight } = await connection.getLatestBlockhash();
+        logger.debug("[Withdraw] Fresh backend blockhash:", blockhash);
+        logger.debug("[Withdraw] Fresh backend last valid block height:", backendLastValidBlockHeight);
+        let withdrawTx;
         try {
-            withdrawalTx = await sendAndConfirmTransaction(connection, transaction, [] // No additional signers needed - user already signed
-            );
+            logger.debug("[Withdraw] Sending raw transaction...");
+            withdrawTx = await connection.sendRawTransaction(rawTransaction, { skipPreflight: true });
+            logger.debug("[Withdraw] Transaction sent, confirming:", withdrawTx);
+            await connection.confirmTransaction({ signature: withdrawTx, lastValidBlockHeight: backendLastValidBlockHeight, blockhash: blockhash }, 'confirmed');
+            logger.debug("[Withdraw] Transaction confirmed:", withdrawTx);
         }
-        catch (txError) {
-            logger.error("[Withdraw] sendAndConfirmTransaction failed:", txError);
-            let errorMessage = txError.message || "Solana transaction failed during send.";
-            if (txError.logs) {
-                errorMessage += ` Logs: ${txError.logs.join(' | ')}`;
-            }
-            throw new Error(errorMessage);
+        catch (error) {
+            logger.error("[Withdraw] Transaction failed:", error);
+            throw error;
         }
-        logger.info("[Withdraw] tx sent", withdrawalTx);
-        logger.info("[Withdraw] tx confirmed", withdrawalTx);
+        logger.info("[Withdraw] tx sent", withdrawTx);
+        logger.info("[Withdraw] tx confirmed", withdrawTx);
         // Fetch full transaction details to inspect logs for instruction errors
-        const confirmedTx = await connection.getTransaction(withdrawalTx, {
+        const confirmedTx = await connection.getTransaction(withdrawTx, {
             commitment: 'confirmed',
             maxSupportedTransactionVersion: 0
         });
@@ -146,7 +125,7 @@ const withdrawFunds = async (req, res) => {
             }
         }
         // Use the transaction hash
-        const txHash = withdrawalTx;
+        const txHash = withdrawTx;
         // Update user balance in DB
         const updatedUser = await User.findOneAndUpdate({ walletAddress }, {
             $inc: {
