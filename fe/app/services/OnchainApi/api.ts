@@ -3,7 +3,7 @@ import { toast } from "react-toastify";
 
 
 // Deposit funds using user's connected Solana wallet
-export const DepositFunds = async (walletAddress: string, amount: number, signedTransaction: string) => {
+export const DepositFunds = async (walletAddress: string, amount: number, signedTransaction: string, lastValidBlockHeight: number) => {
     if (!walletAddress || !amount || amount <= 0 || !signedTransaction) {
         throw new Error("Missing required fields for deposit: walletAddress, amount, signedTransaction");
     }
@@ -11,7 +11,8 @@ export const DepositFunds = async (walletAddress: string, amount: number, signed
         const backendResponse = await axios.post(`${process.env.NEXT_PUBLIC_BE_URL}/api/depositFunds/dp`, {
             walletAddress,
             amount,
-            signedTransaction
+            signedTransaction,
+            lastValidBlockHeight
         });
         if (backendResponse.status !== 200) {
             throw new Error("Failed to deposit funds via backend");

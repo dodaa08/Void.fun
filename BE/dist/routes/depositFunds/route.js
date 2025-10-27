@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { User } from "../../Db/schema.js";
-import { Connection, PublicKey, Keypair, Transaction } from "@solana/web3.js";
+import { Connection, PublicKey, Keypair } from "@solana/web3.js";
 import logger from "../../utils/logger.js";
 import dotenv from "dotenv";
 import { Buffer } from 'buffer';
@@ -29,7 +29,7 @@ const provider = new anchor.AnchorProvider(connection, null, anchor.AnchorProvid
 const program = new anchor.Program(idl, provider); // Explicitly typed program generic
 const DepositFundsRouter = Router();
 const depositFunds = async (req, res) => {
-    const { walletAddress, amount, txHash, diedOnDeathTile, signedTransaction } = req.body;
+    const { walletAddress, amount, txHash, diedOnDeathTile, signedTransaction, lastValidBlockHeight: frontendLastValidBlockHeight } = req.body;
     logger.info("[Deposit] request", { walletAddress, amount, txHash });
     logger.debug("[Deposit] types", {
         walletAddressType: typeof walletAddress,
@@ -38,18 +38,20 @@ const depositFunds = async (req, res) => {
         walletAddressValue: walletAddress,
         amountValue: amount,
         txHashValue: txHash,
-        hasSignedTransaction: !!signedTransaction
+        hasSignedTransaction: !!signedTransaction,
+        lastValidBlockHeightType: typeof frontendLastValidBlockHeight
     });
     // Input validation
-    if (!walletAddress || !amount || !signedTransaction) {
+    if (!walletAddress || !amount || !signedTransaction || typeof frontendLastValidBlockHeight === 'undefined') {
         logger.warn("[Deposit] validation failed", {
             hasWalletAddress: !!walletAddress,
             hasAmount: !!amount,
-            hasSignedTransaction: !!signedTransaction
+            hasSignedTransaction: !!signedTransaction,
+            hasLastValidBlockHeight: typeof frontendLastValidBlockHeight !== 'undefined'
         });
         return res.status(400).json({
             success: false,
-            message: "Missing required fields: walletAddress, amount, signedTransaction"
+            message: "Missing required fields: walletAddress, amount, signedTransaction, lastValidBlockHeight"
         });
     }
     if (amount <= 0) {
@@ -77,59 +79,23 @@ const depositFunds = async (req, res) => {
         else {
             logger.debug("[Deposit] User found:", user);
         }
-        // Deserialize the partially signed transaction from the frontend
-        logger.debug("[Deposit] Deserializing signed transaction...");
-        const transaction = Transaction.from(Buffer.from(signedTransaction, 'base64'));
-        logger.debug("[Deposit] Transaction deserialized.");
-        // Set a fresh recent blockhash on the transaction before sending
-        logger.debug("[Deposit] Fetching recent blockhash...");
-        transaction.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
-        logger.debug("[Deposit] Recent blockhash set:", transaction.recentBlockhash);
-        logger.debug("[Deposit] Transaction signatures (before backend serialize):", transaction.signatures.map(s => s.publicKey.toBase58()));
-        // Check if the transaction contains the expected deposit instruction
-        const expectedProgramId = program.programId;
-        const instruction = transaction.instructions[0]; // Assuming the deposit instruction is the first one
-        logger.debug("[Deposit] First instruction programId:", instruction?.programId.toBase58());
-        logger.debug("[Deposit] Expected programId:", expectedProgramId.toBase58());
-        if (!instruction || !instruction.programId.equals(expectedProgramId)) {
-            logger.warn("[Deposit] Transaction does not contain expected program instruction");
-            return res.status(400).json({ success: false, message: "Invalid transaction: Program instruction mismatch" });
-        }
-        // Verify expected accounts in the instruction
-        const expectedUserPubkey = new PublicKey(walletAddress);
-        logger.debug("[Deposit] Expected user pubkey:", expectedUserPubkey.toBase58());
-        const [casinoPda] = PublicKey.findProgramAddressSync([Buffer.from("casino"), authorityKeypair.publicKey.toBuffer()], programId);
-        logger.debug("[Deposit] Casino PDA:", casinoPda.toBase58());
-        const [userAccountPda] = PublicKey.findProgramAddressSync([Buffer.from("user"), expectedUserPubkey.toBuffer(), casinoPda.toBuffer()], programId);
-        logger.debug("[Deposit] User Account PDA:", userAccountPda.toBase58());
-        // Verify the instruction accounts match expected PDAs and user
-        const accountMetaPubkeys = instruction.keys.map(key => key.pubkey.toBase58());
-        logger.debug("[Deposit] Instruction account pubkeys:", accountMetaPubkeys);
-        if (!accountMetaPubkeys.includes(expectedUserPubkey.toBase58())) {
-            logger.warn("[Deposit] User not found in transaction accounts");
-            return res.status(400).json({ success: false, message: "User account mismatch in transaction" });
-        }
-        if (!accountMetaPubkeys.includes(userAccountPda.toBase58())) {
-            logger.warn("[Deposit] User account PDA not found in transaction accounts");
-            return res.status(400).json({ success: false, message: "User PDA account mismatch in transaction" });
-        }
-        if (!accountMetaPubkeys.includes(casinoPda.toBase58())) {
-            logger.warn("[Deposit] Casino PDA not found in transaction accounts");
-            return res.status(400).json({ success: false, message: "Casino PDA account mismatch in transaction" });
-        }
-        // For deposit, the user has already signed the transaction
-        // We don't need to add authority signature since authority is not part of deposit instruction
-        // Send the transaction as-is (already signed by frontend wallet)
+        // The frontend now sends a fully signed, serialized transaction.
+        // The backend simply relays it and uses lastValidBlockHeight for confirmation.
+        logger.debug("[Deposit] Received serialized transaction from frontend. Sending directly.");
+        const rawTransaction = Buffer.from(signedTransaction, 'base64');
+        const { blockhash, lastValidBlockHeight: backendLastValidBlockHeight } = await connection.getLatestBlockhash();
+        logger.debug("[Deposit] Fresh backend blockhash:", blockhash);
+        logger.debug("[Deposit] Fresh backend last valid block height:", backendLastValidBlockHeight);
         let depositTx;
         try {
             logger.debug("[Deposit] Sending raw transaction...");
-            depositTx = await connection.sendRawTransaction(transaction.serialize());
+            depositTx = await connection.sendRawTransaction(rawTransaction, { skipPreflight: true }); // skipPreflight for more reliability
             logger.debug("[Deposit] Transaction sent, confirming:", depositTx);
-            await connection.confirmTransaction(depositTx, 'confirmed');
+            await connection.confirmTransaction({ signature: depositTx, lastValidBlockHeight: frontendLastValidBlockHeight, blockhash: blockhash }, 'confirmed');
             logger.debug("[Deposit] Transaction confirmed.");
         }
         catch (txError) {
-            logger.error("[Deposit] sendAndConfirmTransaction failed:", txError);
+            logger.error("[Deposit] sendRawTransaction failed:", txError);
             let errorMessage = txError.message || "Solana transaction failed during send.";
             if (txError.logs) {
                 errorMessage += ` Logs: ${txError.logs.join(' | ')}`;

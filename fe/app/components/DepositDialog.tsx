@@ -8,6 +8,7 @@ import { Program, AnchorProvider, BN } from '@coral-xyz/anchor';
 import { toast } from 'react-toastify';
 import { DepositFunds } from '@/app/services/OnchainApi/api';
 import idl_raw from '../contracts/casino_simple.json'; // Ensure this path is correct
+import { Buffer } from 'buffer'; // Re-add Buffer import
 
 // Custom Anchor Wallet class to wrap the wallet adapter
 class CustomAnchorWallet implements anchor.Wallet {
@@ -160,8 +161,18 @@ const DepositDialog: React.FC<DepositDialogProps> = ({ isOpen, onClose, onDeposi
         .instruction();
 
       const transaction = new Transaction().add(depositInstruction);
-      transaction.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+
+      console.log("Deposit transaction BEFORE setting blockhash/feePayer:", transaction);
+
+      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash(); // Fetch lastValidBlockHeight
+      transaction.recentBlockhash = blockhash;
       transaction.feePayer = publicKey;
+
+      console.log("Deposit transaction AFTER setting blockhash/feePayer:", transaction);
+      console.log("  Blockhash AFTER setting:", transaction.recentBlockhash);
+      console.log("  Last Valid Block Height AFTER setting:", lastValidBlockHeight); // Log lastValidBlockHeight
+      console.log("  Fee Payer AFTER setting:", transaction.feePayer?.toBase58());
+      console.log("  Instructions AFTER setting:", transaction.instructions.map(ix => ({ programId: ix.programId.toBase58(), data: ix.data.toString('hex') })));
 
       // Simulate the transaction before sending
       console.log("Simulating deposit transaction...");
@@ -176,12 +187,19 @@ const DepositDialog: React.FC<DepositDialogProps> = ({ isOpen, onClose, onDeposi
       console.log("Deposit transaction simulation successful.");
 
       const signedTransactionFromWallet = await signTransaction!(transaction);
-      const serializedTransaction = signedTransactionFromWallet.serialize({ requireAllSignatures: false, verifySignatures: false }).toString('base64');
+      console.log("Deposit transaction AFTER signing:", signedTransactionFromWallet);
+      console.log("  Signatures AFTER signing:", signedTransactionFromWallet.signatures.map(s => ({ publicKey: s.publicKey.toBase58(), signature: s.signature ? Buffer.from(s.signature).toString('hex') : 'N/A' })));
+
+      const serializedTransaction = signedTransactionFromWallet.serialize(); // Serialize to Uint8Array
+      const serializedTransactionBase64 = Buffer.from(serializedTransaction).toString('base64'); // Convert to base64 for API
+      console.log("Serialized transaction (Uint8Array) to be sent to backend:", serializedTransaction);
+      console.log("Serialized transaction (base64) to be sent to backend:", serializedTransactionBase64);
       
-      const response = await DepositFunds(publicKey.toBase58(), amount, serializedTransaction);
+      const response = await DepositFunds(publicKey.toBase58(), amount, serializedTransactionBase64, lastValidBlockHeight); // Pass lastValidBlockHeight
 
       if (response.status === 200) {
-        toast.success("Deposit successful!");
+        console.log("Deposit successful! Transaction Hash:", response.data?.transactionHash);
+        toast.success(`Deposit successful! Tx: ${response.data?.transactionHash}`);
         onDepositSuccess(amount);
         onClose();
       } else {
