@@ -24,11 +24,11 @@ class CustomAnchorWallet implements anchor.Wallet {
     return this.wallet.adapter.publicKey!;
   }
 
-  async signAllTransactions<T extends Transaction>(transactions: T[]): Promise<T[]> {
+  async signAllTransactions<T extends (Transaction | VersionedTransaction)>(transactions: T[]): Promise<T[]> {
     return this.wallet.adapter.signAllTransactions!(transactions);
   }
 
-  async signTransaction<T extends Transaction>(transaction: T): Promise<T> {
+  async signTransaction<T extends (Transaction | VersionedTransaction)>(transaction: T): Promise<T> {
     return this.wallet.adapter.signTransaction!(transaction);
   }
 }
@@ -53,6 +53,7 @@ const BottomBar = ()=>{
   const [referredUser, setReferredUser] = useState("");
   const [isReferredUser, setIsReferredUser] = useState(false);
   const [referredUserReward, setReferredUserReward] = useState(0);
+  const [isWithdrawing, setIsWithdrawing] = useState(false); // Declare isWithdrawing state
 
 
   useEffect(() => {

@@ -18,11 +18,11 @@ class CustomAnchorWallet implements anchor.Wallet {
     return this.wallet.adapter.publicKey!;
   }
 
-  async signAllTransactions<T extends Transaction>(transactions: T[]): Promise<T[]> {
+  async signAllTransactions<T extends (Transaction | VersionedTransaction)>(transactions: T[]): Promise<T[]> {
     return this.wallet.adapter.signAllTransactions!(transactions);
   }
 
-  async signTransaction<T extends Transaction>(transaction: T): Promise<T> {
+  async signTransaction<T extends (Transaction | VersionedTransaction)>(transaction: T): Promise<T> {
     return this.wallet.adapter.signTransaction!(transaction);
   }
 }
@@ -199,7 +199,36 @@ const DepositDialog: React.FC<DepositDialogProps> = ({ isOpen, onClose, onDeposi
 
       if (response.status === 200) {
         console.log("Deposit successful! Transaction Hash:", response.data?.transactionHash);
-        toast.success(`Deposit successful! Tx: ${response.data?.transactionHash}`);
+        const txHash = response.data?.transactionHash;
+        const explorerUrl = `https://explorer.solana.com/tx/${txHash}?cluster=devnet`;
+
+        toast.success(
+          <div className="flex flex-col items-start">
+            <span>Deposit successful {amount} SOL!</span>
+            {txHash && (
+              <p className="font-mono text-xs text-black break-all mt-1">
+                {txHash}
+              </p>
+            )}
+            <div className="mt-2 flex space-x-2">
+              <button
+                onClick={() => {
+                  if (txHash) {
+                    navigator.clipboard.writeText(txHash);
+                    toast.info("Transaction hash copied!");
+                  }
+                }}
+                className="px-2 py-1 rounded bg-gray-700 text-white hover:bg-gray-600"
+              >
+                Copy
+              </button>
+              <a href={explorerUrl} target="_blank" rel="noopener noreferrer" className="px-2 py-1 rounded bg-lime-400 text-black hover:bg-lime-300">
+                View
+              </a>
+            </div>
+          </div>,
+          { autoClose: 10000 }
+        );
         onDepositSuccess(amount);
         onClose();
       } else {
