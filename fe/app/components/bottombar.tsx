@@ -760,7 +760,7 @@ const BottomBar = ()=>{
       <div className="flex flex-col gap-2">
       <span className="text-lime-400 text-xl">Earnings: { (cumulativePayoutAmount / 150).toFixed(4) } SOL</span>
 
-      {hasHitFirstSafeTile && depositFunds > 0 && walletAddress && (
+      {Math.max(0, depositFunds) > 0 && walletAddress && (
         <div className="flex justify-center">
           <button 
             onClick={handleWithdraw}
