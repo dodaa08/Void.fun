@@ -77,7 +77,7 @@ const payouts = async (req: any, res: any) => {
             }
         });
 
-        res.status(200).json({ success: true, message: "Payouts successful", user });
+        res.status(200).json({ success: true, message: "Payouts successful", txHash: payoutTx, user });
        }
        else{
         return res.status(400).json({ success: false, message: "Payout failed" });

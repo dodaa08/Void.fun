@@ -130,11 +130,14 @@ export const useGame = create<GameState>((set, get) => ({
         const effectiveStake = typeof stakeOverride === "number" ? stakeOverride : stake;
         const newCumulativeMultiplier = rowMultiplier;
         const ethNow = Number((effectiveStake * newCumulativeMultiplier).toFixed(4));
-        const deathPoints = Number((ethNow * 150).toFixed(2));
+        const currentRowPoints = Number((ethNow * 150).toFixed(2));
+        const { cumulativePayoutAmount: prevCumulative } = get();
+        
+        
         set({
           cumulativeMultiplier: newCumulativeMultiplier,
           payoutAmount: ethNow,
-          cumulativePayoutAmount: deathPoints,
+          cumulativePayoutAmount: prevCumulative + currentRowPoints,
         });
       }
     } catch (e) {

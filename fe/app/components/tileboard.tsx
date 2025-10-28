@@ -150,7 +150,7 @@ const TileBoard = ()=>{
 	}
 
 	const handleTileClick = useCallback(async (visualIdx: number, clickedTileIdx: number)=>{
-		if(!publicKey || !isPlaying) return;
+		if(!isPlaying) return;
 		if (visualIdx !== activeRow || clickedByRow[visualIdx]) return; // only current row once
 		
 		// Prevent multiple simultaneous clicks
@@ -194,7 +194,13 @@ const TileBoard = ()=>{
 		setDeathTiles(prev => ({ ...prev, [visualIdx]: deathIdx }))
 		
 		const rowMult = rows[actualIdx]?.multiplier ?? 1;
-        await selectTile(actualIdx, clickedTileIdx, publicKey.toBase58(), isDeath, rowMult);
+        await selectTile(actualIdx, clickedTileIdx, publicKey?.toBase58() || "demo", isDeath, rowMult);
+        
+        // Track first safe tile hit
+        if (!isDeath) {
+          // This will be handled by the parent component
+          window.dispatchEvent(new CustomEvent('firstSafeTileHit'));
+        }
 		// await selectTile(actualIdx, clickedTileIdx, walletAddress, isDeath);
 		
 		if(isDeath){

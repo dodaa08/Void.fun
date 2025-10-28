@@ -68,7 +68,7 @@ const Navbar = () => {
       <div className="flex justify-center py-5 w-full border-b border-lime-900 bg-black/90">
         <div className="flex justify-between items-center w-full px-4">
           {/* Left side components */}
-          <div className="flex items-center gap-6 text-xl">
+          {/* <div className="flex items-center gap-6 text-xl">
             <button 
               className="flex items-center gap-2 text-gray-300 hover:text-white transition-colors cursor-pointer"
               onClick={handleReferralClick}
@@ -78,7 +78,7 @@ const Navbar = () => {
               </svg>
               <span className="text-lg" >Referrals</span>
             </button>
-          </div>  
+          </div>   */}
 
           {/* Center components */}
           <div className="flex items-center gap-2">
@@ -142,7 +142,7 @@ const Navbar = () => {
       </div>
 
       {/* Referral Dialog */}
-      {isReferralDialogOpen && (
+      {/* {isReferralDialogOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
           <div className="bg-[#0f172a]/95 border border-gray-800/60 rounded-2xl p-6 shadow-2xl max-w-md w-full mx-4">
             <div className="flex items-center justify-between mb-4">
@@ -183,7 +183,7 @@ const Navbar = () => {
             </div>
           </div>
         </div>
-      )}
+      )} */}
     </>
   );
 };

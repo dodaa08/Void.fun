@@ -214,19 +214,15 @@ const DepositDialog: React.FC<DepositDialogProps> = ({ isOpen, onClose, onDeposi
         const explorerUrl = `https://explorer.solana.com/tx/${txHash}?cluster=devnet`;
 
         toast.success(
-          <div className="flex flex-col items-start bg-black/80 p-3 rounded">
-            <span className="text-gray-800">Deposit successful {amount} SOL!</span>
-            {txHash && (
-              <p className="font-mono text-xs text-gray-800 break-all mt-1">
-                {txHash}
-              </p>
-            )}
-            <div className="mt-2 flex space-x-2">
+          <div className="text-sm">
+            <div className="font-semibold">Deposit successful {amount} SOL</div>
+            <div className="mt-1 font-mono break-all">{txHash}</div>
+            <div className="mt-2 flex gap-2">
               <button
                 onClick={() => {
                   if (txHash) {
                     navigator.clipboard.writeText(txHash);
-                    toast.info("Transaction hash copied!");
+                    toast.success("TX hash copied", { autoClose: 2000 });
                   }
                 }}
                 className="px-2 py-1 rounded bg-gray-700 text-white hover:bg-gray-600"

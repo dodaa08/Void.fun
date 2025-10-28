@@ -103,10 +103,18 @@ const depositFunds = async (req, res) => {
             throw new Error(errorMessage);
         }
         logger.debug("[Deposit] Solana transaction sent and confirmed", depositTx);
-        // Update user balance atomically
+        // Update user balance atomically - ensure DepositBalance is never negative
         logger.debug("[Deposit] Attempting to update user balance in DB for wallet:", walletAddress);
-        const updatedUser = await User.findOneAndUpdate({ walletAddress }, { $inc: { DepositBalance: amount, balance: amount } }, // Also update overall balance
-        { new: true });
+        // First get current user to calculate new balance
+        const currentUser = await User.findOne({ walletAddress });
+        const newDepositBalance = Math.max(0, (currentUser?.DepositBalance || 0) + amount);
+        const newBalance = (currentUser?.balance || 0) + amount;
+        const updatedUser = await User.findOneAndUpdate({ walletAddress }, {
+            $set: {
+                DepositBalance: newDepositBalance,
+                balance: newBalance
+            }
+        }, { new: true });
         if (!updatedUser) {
             logger.error("[Deposit] Failed to find and update user after successful transaction.");
             return res.status(500).json({
@@ -158,6 +166,12 @@ const FetchDepositFunds = async (req, res) => {
         }
         else {
             logger.debug("[FetchDepositFunds] User found on fetch:", user);
+        }
+        // Ensure DepositBalance is never negative
+        if (user.DepositBalance < 0) {
+            logger.warn("[FetchDepositFunds] Negative DepositBalance detected, correcting to 0:", user.DepositBalance);
+            user.DepositBalance = 0;
+            await user.save();
         }
         res.status(200).json({
             success: true,

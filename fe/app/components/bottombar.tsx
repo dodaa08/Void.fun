@@ -47,6 +47,9 @@ const BottomBar = ()=>{
   const [isReferredUser, setIsReferredUser] = useState(false);
   const [referredUserReward, setReferredUserReward] = useState(0);
   const [isWithdrawing, setIsWithdrawing] = useState(false); // Declare isWithdrawing state
+  const [hasHitFirstSafeTile, setHasHitFirstSafeTile] = useState(false); // Track if user hit first safe tile
+  const [hasWithdrawn, setHasWithdrawn] = useState(false); // Track if user has withdrawn
+  const [isVerifying, setIsVerifying] = useState(false); // Track if verify button is processing
 
 
   useEffect(() => {
@@ -82,9 +85,26 @@ const BottomBar = ()=>{
     return () => { cancelled = true };
   }, [serverCommit, sessionId]);
 
-    useEffect(() => {
-      setMounted(true);
-    }, []);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Listen for first safe tile hit
+  useEffect(() => {
+    const handleFirstSafeTileHit = () => {
+      setHasHitFirstSafeTile(true);
+    };
+
+    window.addEventListener('firstSafeTileHit', handleFirstSafeTileHit);
+    return () => window.removeEventListener('firstSafeTileHit', handleFirstSafeTileHit);
+  }, []);
+
+  // Reset hasWithdrawn when round ends due to death (not withdrawal)
+  useEffect(() => {
+    if (roundEnded && !isPlaying && diedOnDeathTile) {
+      setHasWithdrawn(false);
+    }
+  }, [roundEnded, isPlaying, diedOnDeathTile]);
 
     useEffect(() => {
       if(finalPayoutAmount > 0){
@@ -100,7 +120,7 @@ const BottomBar = ()=>{
     if (isPlaying && !roundEnded && walletAddress) {
       cachePayouts({ key: walletAddress, value: cumulativePayoutAmount, roundEnded: false, walletAddress });
       if(cumulativePayoutAmount > 0){
-        const solEarned = (cumulativePayoutAmount / LAMPORTS_PER_SOL).toFixed(4); // Convert Death Points to SOL
+        const solEarned = (cumulativePayoutAmount / 150).toFixed(4); // Convert Death Points to SOL
         toast.success(`SOL Earned ${solEarned} ++`);
       }
     }
@@ -157,6 +177,9 @@ const BottomBar = ()=>{
       start();
       deathToastShownRef.current = false; // Reset death toast flag for new game
       setReplay(false);
+      setHasHitFirstSafeTile(false); // Reset first safe tile flag
+      setHasWithdrawn(false); // Reset withdrawal flag
+      setIsVerifying(false); // Reset verify state
       toast.success(`Round started.`);
     }
 
@@ -166,6 +189,17 @@ const BottomBar = ()=>{
       deathToastShownRef.current = false;
       setReplay(true);
       toast.success(`Round replayed.`);
+    }
+
+    const handleVerify = () => {
+      if (!sessionId) return;
+      
+      setIsVerifying(true);
+      
+      // 3-second delay before redirect
+      setTimeout(() => {
+        window.location.href = `/verify?sessionId=${sessionId}`;
+      }, 2000);
     }
 
 
@@ -283,13 +317,13 @@ const BottomBar = ()=>{
         checkBalance();
         intervalId = setInterval(checkBalance, 2000);
         
-        // Stop checking after 30 seconds (timeout)
+        // Stop checking after 10 seconds (timeout)
         timeoutId = setTimeout(() => {
           setIsMonitoringDeposit(false);
           setExpectedBalance(null);
           fetchUserBalance();
           toast.info("Deposit processed - balance updated!");
-        }, 30000);
+        }, 10000);
       }
       
       return () => {
@@ -300,13 +334,16 @@ const BottomBar = ()=>{
 
     // Function to start monitoring after deposit
     const startDepositMonitoring = (depositAmount: number) => {
-      const newExpectedBalance = depositFunds + depositAmount;
+      // Fix: Ensure depositFunds is not negative before adding
+      const currentDepositFunds = Math.max(0, depositFunds);
+      const newExpectedBalance = currentDepositFunds + depositAmount;
       
       // Optimistic UI update - immediately update frontend
       setDepositFunds(newExpectedBalance);
       
       setExpectedBalance(newExpectedBalance);
       setIsMonitoringDeposit(true);
+      
       // toast.info("Processing deposit on blockchain...");
       try {
         // If an error occurs during deposit initiation, it might be caught here
@@ -320,7 +357,7 @@ const BottomBar = ()=>{
           toast.error("Error processing deposit. Please try again.");
         }
         // Reset optimistic update on error
-        setDepositFunds(depositFunds);
+        setDepositFunds(Math.max(0, depositFunds));
         setExpectedBalance(null);
         setIsMonitoringDeposit(false);
       }
@@ -377,9 +414,20 @@ const BottomBar = ()=>{
     return () => clearInterval(intervalId);
   }, [connected, publicKey, connection]);
 
+
+
+
     const handleWithdraw = async () => {
-    if (!publicKey || !connected || !depositFunds || depositFunds <= 0) {
-      toast.error("Please connect your Solana wallet and ensure you have funds to withdraw.");
+    if (!publicKey || !connected) {
+      toast.error("Please connect your Solana wallet to withdraw.");
+      return;
+    }
+
+    const currentEarnings = (cumulativePayoutAmount / 150);
+    const totalWithdrawable = (depositFunds || 0) + currentEarnings;
+    
+    if (totalWithdrawable <= 0) {
+      toast.error("No funds available to withdraw.");
       return;
     }
 
@@ -418,7 +466,7 @@ const BottomBar = ()=>{
                 { autoClose: 12000 }
               );
               setReferredUserReward(0);
-              setDepositFunds(depositFunds - referralReward);
+              setDepositFunds(Math.max(0, depositFunds - referralReward));
             } else {
               toast.error("Failed to transfer referral reward to referrer, proceeding with full withdrawal");
               referralReward = 0;
@@ -429,13 +477,15 @@ const BottomBar = ()=>{
           }
         }
       }
-      const currentEarnings = (cumulativePayoutAmount / LAMPORTS_PER_SOL);
-      adjustedWithdrawableSOL = (depositFunds - referralReward) + currentEarnings;
+      // Only withdraw on-chain deposit funds (earnings are handled separately)
+      adjustedWithdrawableSOL = Math.max(0, depositFunds - referralReward);
+      
       if (adjustedWithdrawableSOL <= 0) {
-        toast.error("Calculated withdrawable amount is zero or negative. No funds to withdraw.");
+        toast.error("No deposit funds to withdraw.");
         setIsWithdrawing(false);
         return;
       }
+      
       toast.info("Processing withdrawal...");
 
       const provider = new AnchorProvider(connection, new CustomAnchorWallet(
@@ -480,10 +530,51 @@ const BottomBar = ()=>{
       const response = await WithdrawFunds(publicKey.toBase58(), adjustedWithdrawableSOL, serializedTransaction);
       if (response.status === 200) {
         const txHash = response.data.data?.transactionHash || 'unknown';
+        // Process earnings payout after successful deposit withdrawal
+        const currentEarnings = (cumulativePayoutAmount / 150);
+        let earningsTxHash = '';
+        
+        if (currentEarnings > 0) {
+          try {
+            const earningsResponse = await fetch(`${process.env.NEXT_PUBLIC_BE_URL}/api/payouts/`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                walletAddress: publicKey.toBase58(),
+                amount: currentEarnings
+              })
+            });
+
+            const earningsResult = await earningsResponse.json();
+            
+            if (earningsResult.success) {
+              earningsTxHash = earningsResult.txHash || earningsResult.transactionHash || 'unknown';
+              console.log("Earnings payout successful:", earningsTxHash);
+            } else {
+              console.error("Earnings payout failed:", earningsResult.message);
+            }
+          } catch (error: any) {
+            console.error("Earnings payout error:", error);
+          }
+        }
+        
+        // Show success toast with both transaction hashes
+        const successMessage = currentEarnings > 0 
+          ? `Withdraw successful! ${adjustedWithdrawableSOL.toFixed(4)} SOL (deposit) + ${currentEarnings.toFixed(4)} SOL (earnings)`
+          : `Withdraw successful! ${adjustedWithdrawableSOL.toFixed(4)} SOL (deposit)`;
+          
         toast.success(
           <div className="text-sm">
-            <div className="font-semibold">Withdraw successful</div>
+            <div className="font-semibold">{successMessage}</div>
             <div className="mt-1 font-mono break-all">{txHash}</div>
+            {earningsTxHash && earningsTxHash !== 'unknown' && (
+              <div className="mt-1">
+                <div className="text-xs text-gray-600">Earnings TX:</div>
+                <div className="font-mono break-all text-xs">{earningsTxHash}</div>
+              </div>
+            )}
             <div className="mt-2 flex gap-2">
               <button
                 onClick={() => {
@@ -507,18 +598,31 @@ const BottomBar = ()=>{
                   View
                 </a>
               )}
+              {earningsTxHash && earningsTxHash !== 'unknown' && (
+                <a
+                  href={`https://explorer.solana.com/tx/${earningsTxHash}?cluster=devnet`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-2 py-1 rounded bg-lime-400 text-black hover:bg-lime-300"
+                >
+                  View Earnings
+                </a>
+              )}
             </div>
           </div>,
-          { autoClose: 12000 }
+          { autoClose: 15000 }
         );
+        
         setCumulativePayoutAmount(0);
         setFinalPayoutAmount(0);
         setDepositFunds(0);
+        setHasHitFirstSafeTile(false);
+        setHasWithdrawn(true);
         deathToastShownRef.current = true;
         useGame.setState({
           isPlaying: false,
           roundEnded: true,
-          diedOnDeathTile: true,
+          diedOnDeathTile: false,
           cumulativePayoutAmount: 0,
           payoutAmount: 0,
           totalLoss: 0,
@@ -566,14 +670,20 @@ const BottomBar = ()=>{
           >
             Copy
           </button>
-          {sessionId && roundEnded && (
+          {sessionId && roundEnded && walletAddress && !hasWithdrawn && (
             <button
-              onClick={() => {
-                window.location.href = `/verify?sessionId=${sessionId}`;
-              }}
-              className="h-6 px-2 bg-lime-400 text-black rounded text-[10px] leading-6 hover:bg-lime-300 transition-colors"
+              onClick={handleVerify}
+              disabled={isVerifying}
+              className="h-6 px-2 bg-lime-400 text-black rounded text-[10px] leading-6 hover:bg-lime-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
             >
-              Verify
+              {isVerifying ? (
+                <>
+                  <div className="w-3 h-3 border border-black border-t-transparent rounded-full animate-spin"></div>
+                  <span>Processing...</span>
+                </>
+              ) : (
+                "Verify"
+              )}
             </button>
           )}
         </div>
@@ -585,7 +695,7 @@ const BottomBar = ()=>{
         <LoadingSpinner />
       ) : !isPlaying && walletAddress && connected ? (
         <>
-        {depositFunds > 0 ? (
+        {Math.max(0, depositFunds) > 0 ? (
           // User has deposited funds - show Start button and balance
           <div className="flex flex-col gap-4 items-center">
             <div className="flex justify-between items-center gap-4 w-full">
@@ -598,7 +708,7 @@ const BottomBar = ()=>{
               
               <div className="flex flex-col items-center gap-1">
                 <span className="text-gray-400 text-sm">Deposited Balance</span>
-                <span className="text-lime-400 text-xl font-bold">{depositFunds.toFixed(4)} SOL</span>
+                <span className="text-lime-400 text-xl font-bold">{Math.max(0, depositFunds).toFixed(4)} SOL</span>
               </div>
             </div>
           </div>
@@ -648,16 +758,16 @@ const BottomBar = ()=>{
       <span className="text-lime-400 text-sm">Earnings: ...</span>
     ) : isPlaying || roundEnded ? (
       <div className="flex flex-col gap-2">
-      <span className="text-lime-400 text-xl">Earnings: { (cumulativePayoutAmount / LAMPORTS_PER_SOL).toFixed(4) } SOL</span>
+      <span className="text-lime-400 text-xl">Earnings: { (cumulativePayoutAmount / 150).toFixed(4) } SOL</span>
 
-      {depositFunds > 0 && cumulativePayoutAmount > 0 && (
+      {hasHitFirstSafeTile && depositFunds > 0 && walletAddress && (
         <div className="flex justify-center">
           <button 
             onClick={handleWithdraw}
             disabled={isWithdrawing}
             className="bg-lime-400 text-black cursor-pointer hover:bg-lime-300 transition-colors font-semibold px-4 py-2 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isWithdrawing ? "Withdrawing..." : "Withdraw"}
+            {isWithdrawing ? "Withdrawing..." : `Withdraw ${((depositFunds || 0) + (cumulativePayoutAmount / 150)).toFixed(4)} SOL`}
           </button>
         </div>
       )}
@@ -683,7 +793,7 @@ const BottomBar = ()=>{
 					</div>
     ) : roundEnded ? (
       <div className="flex flex-row justify-between items-center gap-4">
-        {sessionId && (
+        {sessionId && walletAddress && !hasWithdrawn && (
           <div className="w-full flex justify-center">
             <div className="flex items-center gap-2 bg-[#121a29] border border-gray-700 rounded-lg px-3 py-1">
               <span className="text-gray-400 text-xs">Session:</span>
