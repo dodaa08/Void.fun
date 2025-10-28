@@ -401,7 +401,6 @@ const BottomBar = ()=>{
             const referralResponse = await ReferralRewardPayout(walletAddress, referralReward);
             if (referralResponse.status === 200) {
               const txhash = referralResponse.data.txHash;
-              const EXPLORER_BASE = process.env.NEXT_PUBLIC_SOLANA_EXPLORER_BASE || "https://explorer.solana.com/tx/";
               const copy = async () => {
                 await navigator.clipboard.writeText(txhash);
                 toast.success("TX hash copied", { autoClose: 2000 });
@@ -412,7 +411,7 @@ const BottomBar = ()=>{
                   <div className="mt-1 font-mono break-all">{txhash}</div>
                   <div className="mt-2 flex gap-2">
                     <button onClick={copy} className="px-2 py-1 rounded bg-gray-700 text-white hover:bg-gray-600">Copy</button>
-                    <a href={`${EXPLORER_BASE}${txhash}`} target="_blank" rel="noreferrer" className="px-2 py-1 rounded bg-lime-400 text-black hover:bg-lime-300">View</a>
+                    <a href={`https://explorer.solana.com/tx/${txhash}?cluster=devnet`} target="_blank" rel="noreferrer" className="px-2 py-1 rounded bg-lime-400 text-black hover:bg-lime-300">View</a>
                   </div>
                 </div>
                 ,
@@ -430,7 +429,6 @@ const BottomBar = ()=>{
           }
         }
       }
-      const EXPLORER_BASE = process.env.NEXT_PUBLIC_SOLANA_EXPLORER_BASE || "https://explorer.solana.com/tx/";
       const currentEarnings = (cumulativePayoutAmount / LAMPORTS_PER_SOL);
       adjustedWithdrawableSOL = (depositFunds - referralReward) + currentEarnings;
       if (adjustedWithdrawableSOL <= 0) {
@@ -489,7 +487,6 @@ const BottomBar = ()=>{
             <div className="mt-2 flex gap-2">
               <button
                 onClick={() => {
-                  const EXPLORER_BASE = process.env.NEXT_PUBLIC_SOLANA_EXPLORER_BASE || "https://explorer.solana.com/tx/";
                   const copy = async () => {
                     await navigator.clipboard.writeText(txHash);
                     toast.success("TX hash copied", { autoClose: 2000 });
@@ -502,7 +499,7 @@ const BottomBar = ()=>{
               </button>
               {txHash !== 'unknown' && (
                 <a
-                  href={`${EXPLORER_BASE}${txHash}`}
+                  href={`https://explorer.solana.com/tx/${txHash}?cluster=devnet`}
                   target="_blank"
                   rel="noreferrer"
                   className="px-2 py-1 rounded bg-lime-400 text-black hover:bg-lime-300"
