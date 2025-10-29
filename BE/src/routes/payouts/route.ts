@@ -67,13 +67,9 @@ const payouts = async (req: any, res: any) => {
         
         await User.updateOne({walletAddress}, {
             $inc: {
-                DepositBalance: -amount,      // ✅
-                balance: amount,              // ✅
-                totalEarned: amount,          // ✅
-                roundsPlayed: 1              // ✅
-            },
-            $set: {
-                payouts: 0
+                totalEarned: amount,
+                payouts: amount,
+                roundsPlayed: 1
             }
         });
 

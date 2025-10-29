@@ -8,7 +8,7 @@ import { FetchLeaderboardData } from "../services/OnchainApi/api";
 type LeaderboardEntry = {
 	rank: number;
 	walletAddress: string;
-	totalEarned: number;
+	payouts: number;
 	roundsPlayed: number;
 }
 
@@ -16,6 +16,13 @@ type LeaderboardEntry = {
 const Leaderboard = ()=>{
 	const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
 	const [spinner, setSpinner] = useState(false);
+
+	const formatAddress = (addr: string) => {
+		if (!addr) return "";
+		const prefix = addr.slice(0, 4);
+		const suffix = addr.slice(-3);
+		return `${prefix}...${suffix}`;
+	};
 	
 
 
@@ -49,8 +56,8 @@ const Leaderboard = ()=>{
 	return (
 		<>
 		
-	    <div className=" flex justify-center min-h-max  select-none overflow-y-auto h-[calc(100vh-8rem)] w-full	">
-			<div className="">
+	    <div className="flex justify-center min-h-max select-none overflow-y-auto overflow-x-hidden h-[calc(100vh-8rem)] w-full">
+			<div className="w-[420px] md:w-[460px]">
 				<div className="py-5">
 					<h3 className="text-lime-400 text-center tracking-widest text-sm font-bold py-5">LEADERBOARD</h3>
 				</div>
@@ -64,17 +71,17 @@ const Leaderboard = ()=>{
 						</div>
 						</>
 					) : (
-						<div className="bg-[#0b1206]/80 rounded-xl w-90">
-					<ul className="divide-y divide-lime-900/40">
+							<div className="w-full">
+						<ul className="divide-y divide-lime-900/40">
 						{entries.map((e, i) => (
-							<li key={i} className="flex items-center justify-between px-4 py-3">
+								<li key={i} className="flex items-center justify-between px-4 py-3">
 								<div className="flex items-center gap-3">
 									<span className="text-gray-400 text-xs w-4">{e.rank}</span>
-									<span className="text-gray-200 text-sm truncate max-w-[180px]">{e.walletAddress}</span>
+										<span className="text-gray-200 text-sm truncate max-w-[240px]">{formatAddress(e.walletAddress)}</span>
 								</div>
 								<div className="text-right">
-									<span className="text-lime-400 font-semibold tabular-nums text-sm">+{e.totalEarned.toFixed(4)}</span>
-									<span className="text-gray-400 text-xs ml-1">MON</span>
+										<span className="text-lime-400 font-semibold tabular-nums text-sm">+{Number(e.payouts || 0).toFixed(4)}</span>
+										<span className="text-gray-400 text-xs ml-1">SOL</span>
 								</div>
 							</li>
 						))}

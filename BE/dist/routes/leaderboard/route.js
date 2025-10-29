@@ -4,15 +4,15 @@ import logger from "../../utils/logger.js";
 const LeaderboardRouter = Router();
 LeaderboardRouter.get("/leaderboard-data", async (req, res) => {
     try {
-        // Get top 100 users with highest earnings, excluding users with 0 earnings
-        const users = await User.find({ totalEarned: { $gt: 0 } })
-            .sort({ totalEarned: -1 }) // Sort by totalEarned descending
+        // Get top 100 users with highest payouts, excluding users with 0 payouts
+        const users = await User.find({ payouts: { $gt: 0 } })
+            .sort({ payouts: -1 }) // Sort by payouts descending
             .limit(100) // Limit to top 100
-            .select('walletAddress totalEarned roundsPlayed'); // Only return needed fields
+            .select('walletAddress payouts roundsPlayed'); // Only return needed fields
         const leaderboardData = users.map((user, index) => ({
             rank: index + 1,
             walletAddress: user.walletAddress,
-            totalEarned: user.totalEarned,
+            payouts: user.payouts || 0,
             roundsPlayed: user.roundsPlayed || 0
         }));
         res.status(200).json({

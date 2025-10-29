@@ -654,8 +654,8 @@ const BottomBar = ()=>{
 	
 	return (
       <>
-      <div className="fixed inset-x-0 bottom-6 flex justify-center px-4 ">
-         <div className="w-full max-w-2xl bg-[#0b1206]/95 border border-gray-900 rounded-2xl px-6 pt-10 pb-6  shadow-gray-900 shadow-inner">
+      <div className="fixed inset-x-0 bottom-6 flex justify-center px-4 transform -translate-x-20 md:-translate-x-28">
+         <div className="w-full max-w-xl bg-[#0b1206]/95 border border-gray-900 rounded-xl px-5 pt-8 pb-5 shadow-gray-900 shadow-inner">
           
         <div className="flex flex-col justify-between items-center gap-4">
     {/* Commit badge (funded games) */}

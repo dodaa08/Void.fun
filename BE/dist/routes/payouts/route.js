@@ -49,13 +49,9 @@ const payouts = async (req, res) => {
             await Payout.create({ user: user._id, amount, txHash: payoutTx });
             await User.updateOne({ walletAddress }, {
                 $inc: {
-                    DepositBalance: -amount, // ✅
-                    balance: amount, // ✅
-                    totalEarned: amount, // ✅
-                    roundsPlayed: 1 // ✅
-                },
-                $set: {
-                    payouts: 0
+                    totalEarned: amount,
+                    payouts: amount,
+                    roundsPlayed: 1
                 }
             });
             res.status(200).json({ success: true, message: "Payouts successful", txHash: payoutTx, user });
