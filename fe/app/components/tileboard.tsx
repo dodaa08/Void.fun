@@ -25,6 +25,8 @@ const TileBoard = ()=>{
 	const fetchedLastSessionRef = useRef(false);
 	const [spinner, setSpinner] = useState(false);
 	const isProcessingClickRef = useRef(false);
+	// Refs for auto-scrolling to the active row
+	const rowRefs = useRef<Record<number, HTMLDivElement | null>>({});
 	
 
 	const LoadingSpinner = ({ message = "Loading..." }) => (
@@ -281,6 +283,15 @@ const TileBoard = ()=>{
 		}
 	}, [shuffleBoard, setSessionId, setShuffleBoard]);
 
+	useEffect(() => {
+		// Whenever the active row changes in play, scroll it into view smoothly
+		if (!isPlaying) return;
+		const el = rowRefs.current[activeRow];
+		if (el && typeof el.scrollIntoView === 'function') {
+			el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+		}
+	}, [activeRow, isPlaying]);
+
 
 	return(
 		
@@ -293,7 +304,7 @@ const TileBoard = ()=>{
 <div className="px-4 py-10 mb-40">
 	      <div className="flex flex-col gap-4">
 		{visualRows.map((row, vIdx) => (
-			<div key={vIdx} className="flex items-center gap-4 justify-center">
+			<div key={vIdx} className="flex items-center gap-4 justify-center" ref={(el) => { rowRefs.current[vIdx] = el; }}>
 				<div className="text-gray-300 font-semibold tabular-nums select-none w-16 text-right">
 					{formatMultiplier(row.multiplier)}
 				</div>

@@ -243,9 +243,9 @@ const DepositDialog: React.FC<DepositDialogProps> = ({ isOpen, onClose, onDeposi
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div className="fixed inset-0 bg-[#0b1206]/95 flex items-center justify-center z-50">
       <div className="bg-[#0b1206] border border-gray-800 p-8 rounded-lg shadow-lg w-full max-w-md">
-        <h2 className="text-2xl font-bold text-lime-400 mb-6 text-center">Deposit Funds</h2>
+        <h2 className="text-2xl font-bold text-white mb-6 text-center">Deposit Funds</h2>
         {isAccountInitializing ? (
           <div className="flex flex-col items-center justify-center py-10">
             <svg className="animate-spin h-8 w-8 text-lime-400 mb-4" viewBox="0 0 24 24">

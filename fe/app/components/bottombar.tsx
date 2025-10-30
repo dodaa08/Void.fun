@@ -529,8 +529,30 @@ const BottomBar = ()=>{
       const signedTransactionFromWallet = await signTransaction!(transaction);
       const serializedTransaction = signedTransactionFromWallet.serialize({ requireAllSignatures: false, verifySignatures: false }).toString('base64');
       const response = await WithdrawFunds(publicKey.toBase58(), adjustedWithdrawableSOL, serializedTransaction);
+      // Instead of one toast with two buttons, show two separate toasts if both txHash and earningsTxHash are present:
       if (response.status === 200) {
         const txHash = response.data.data?.transactionHash || 'unknown';
+        // Deposit withdrawal toast
+        toast.success(
+          <div className="text-sm">
+            <div className="font-semibold">
+              Withdraw successful! {adjustedWithdrawableSOL.toFixed(4)} SOL (deposit)
+            </div>
+            <div className="mt-1 font-mono break-all">{txHash}</div>
+            <div className="mt-2 flex gap-2">
+              <a
+                href={`https://explorer.solana.com/tx/${txHash}?cluster=devnet`}
+                target="_blank"
+                rel="noreferrer"
+                className="px-2 py-1 rounded bg-lime-400 text-black hover:bg-lime-300"
+              >
+                View Deposit Withdrawal
+              </a>
+            </div>
+          </div>,
+          { autoClose: 12000 }
+        );
+        
         // Process earnings payout after successful deposit withdrawal
         const currentEarnings = (cumulativePayoutAmount / 150);
         let earningsTxHash = '';
@@ -560,58 +582,27 @@ const BottomBar = ()=>{
           }
         }
         
-        // Show success toast with both transaction hashes
-        const successMessage = currentEarnings > 0 
-          ? `Withdraw successful! ${adjustedWithdrawableSOL.toFixed(4)} SOL (deposit) + ${currentEarnings.toFixed(4)} SOL (earnings)`
-          : `Withdraw successful! ${adjustedWithdrawableSOL.toFixed(4)} SOL (deposit)`;
-          
-        toast.success(
-          <div className="text-sm">
-            <div className="font-semibold">{successMessage}</div>
-            <div className="mt-1 font-mono break-all">{txHash}</div>
-            {earningsTxHash && earningsTxHash !== 'unknown' && (
-              <div className="mt-1">
-                <div className="text-xs text-gray-600">Earnings TX:</div>
-                <div className="font-mono break-all text-xs">{earningsTxHash}</div>
+        if (earningsTxHash && earningsTxHash !== 'unknown') {
+          toast.success(
+            <div className="text-sm">
+              <div className="font-semibold">
+                Earnings payout successful! {currentEarnings.toFixed(4)} SOL
               </div>
-            )}
-            <div className="mt-2 flex gap-2">
-              <button
-                onClick={() => {
-                  const copy = async () => {
-                    await navigator.clipboard.writeText(txHash);
-                    toast.success("TX hash copied", { autoClose: 2000 });
-                  };
-                  copy();
-                }}
-                className="px-2 py-1 rounded bg-gray-700 text-white hover:bg-gray-600"
-              >
-                Copy
-              </button>
-              {txHash !== 'unknown' && (
-                <a
-                  href={`https://explorer.solana.com/tx/${txHash}?cluster=devnet`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="px-2 py-1 rounded bg-lime-400 text-black hover:bg-lime-300"
-                >
-                  View
-                </a>
-              )}
-              {earningsTxHash && earningsTxHash !== 'unknown' && (
+              <div className="mt-1 font-mono break-all">{earningsTxHash}</div>
+              <div className="mt-2 flex gap-2">
                 <a
                   href={`https://explorer.solana.com/tx/${earningsTxHash}?cluster=devnet`}
                   target="_blank"
                   rel="noreferrer"
                   className="px-2 py-1 rounded bg-lime-400 text-black hover:bg-lime-300"
                 >
-                  View Earnings
+                  View Earnings Payout
                 </a>
-              )}
-            </div>
-          </div>,
-          { autoClose: 15000 }
-        );
+              </div>
+            </div>,
+            { autoClose: 12000 }
+          );
+        }
         
         setCumulativePayoutAmount(0);
         setFinalPayoutAmount(0);
