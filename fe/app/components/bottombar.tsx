@@ -779,7 +779,10 @@ const BottomBar = ()=>{
       <div className="flex flex-col gap-2">
       <span className="text-lime-400 text-xl text-center flex items-center gap-2 justify-center">
          {(cumulativePayoutAmount / 150).toFixed(4)}
-         <Image src="/solana.png" alt="Solana Logo" width={22} height={30} className="text-white bg-white rounded-full" />
+         <svg width="18" height="18" viewBox="0 0 16 16" className="inline-block">
+    <circle cx="8" cy="8" r="8" fill="#A3E635" />
+    <text x="8" y="12" fontSize="10" textAnchor="middle" fill="#000">◎</text>
+  </svg>
          </span>
 
      
