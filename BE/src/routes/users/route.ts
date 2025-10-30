@@ -73,8 +73,6 @@ const getAllUsersWithtotalEarned = async (req: any, res: any) => {
 const connectWallet = async (req: any, res: any) => {
   const { walletAddress, referrer } = req.body;
 
-  logger.debug("[Users] wallet-connect", { walletAddress, referrer: !!referrer });
-
   // Input validation
   if (!walletAddress) {
     logger.warn("[Users] wallet-connect missing walletAddress");

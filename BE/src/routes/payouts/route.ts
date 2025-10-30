@@ -67,11 +67,21 @@ const payouts = async (req: any, res: any) => {
         
         await User.updateOne({walletAddress}, {
             $inc: {
-                totalEarned: amount,
-                payouts: amount,
+                payouts: amount,  // Track total withdrawn amount
                 roundsPlayed: 1
             }
         });
+
+        // Clear redis cache for user after successful withdrawal
+        try {
+            await fetch(`${process.env.CLEAR_CACHE_URL || 'http://localhost:8001'}/api/cache/clear-cache`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ walletAddress }),
+            });
+        } catch(e) {
+            logger.warn('Failed to clear redis cache after payout:', e instanceof Error ? e.message : e);
+        }
 
         res.status(200).json({ success: true, message: "Payouts successful", txHash: payoutTx, user });
        }

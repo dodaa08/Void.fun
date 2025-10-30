@@ -173,43 +173,27 @@ const DepositDialog: React.FC<DepositDialogProps> = ({ isOpen, onClose, onDeposi
 
       const transaction = new Transaction().add(depositInstruction);
 
-      console.log("Deposit transaction BEFORE setting blockhash/feePayer:", transaction);
-
       const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash(); // Fetch lastValidBlockHeight
       transaction.recentBlockhash = blockhash;
       transaction.feePayer = publicKey;
 
-      console.log("Deposit transaction AFTER setting blockhash/feePayer:", transaction);
-      console.log("  Blockhash AFTER setting:", transaction.recentBlockhash);
-      console.log("  Last Valid Block Height AFTER setting:", lastValidBlockHeight); // Log lastValidBlockHeight
-      console.log("  Fee Payer AFTER setting:", transaction.feePayer?.toBase58());
-      console.log("  Instructions AFTER setting:", transaction.instructions.map(ix => ({ programId: ix.programId.toBase58(), data: ix.data.toString('hex') })));
-
       // Simulate the transaction before sending
-      console.log("Simulating deposit transaction...");
       const simulationResult = await connection.simulateTransaction(transaction);
       if (simulationResult.value.err) {
-        console.error("Deposit transaction simulation failed:", simulationResult.value.err);
         if (simulationResult.value.logs) {
             console.error("Simulation logs:", simulationResult.value.logs);
         }
         throw new Error(`Deposit simulation failed: ${JSON.stringify(simulationResult.value.err)}`);
       }
-      console.log("Deposit transaction simulation successful.");
 
       const signedTransactionFromWallet = await signTransaction!(transaction);
-      console.log("Deposit transaction AFTER signing:", signedTransactionFromWallet);
-      console.log("  Signatures AFTER signing:", signedTransactionFromWallet.signatures.map(s => ({ publicKey: s.publicKey.toBase58(), signature: s.signature ? Buffer.from(s.signature).toString('hex') : 'N/A' })));
 
       const serializedTransaction = signedTransactionFromWallet.serialize(); // Serialize to Uint8Array
       const serializedTransactionBase64 = Buffer.from(serializedTransaction).toString('base64'); // Convert to base64 for API
-      console.log("Serialized transaction (Uint8Array) to be sent to backend:", serializedTransaction);
-      console.log("Serialized transaction (base64) to be sent to backend:", serializedTransactionBase64);
       
       const response = await DepositFunds(publicKey.toBase58(), amount, serializedTransactionBase64, lastValidBlockHeight); // Pass lastValidBlockHeight
 
       if (response.status === 200) {
-        console.log("Deposit successful! Transaction Hash:", response.data?.transactionHash);
         const txHash = response.data?.transactionHash;
         const explorerUrl = `https://explorer.solana.com/tx/${txHash}?cluster=devnet`;
 

@@ -5,7 +5,7 @@ import Connectbutton from "./Connectbutton";
 import { useWallet } from '@solana/wallet-adapter-react';
 import { getTotalEarnings } from "../services/api";
 import { useEffect } from "react";
-
+import axios from "axios";
 
 const Navbar = () => {
   const { publicKey } = useWallet();
@@ -33,13 +33,13 @@ const Navbar = () => {
   };
 
   useEffect(() => {
-    const fetchTotalEarnings = async () => {
-      setIsLoadingTotalEarnings(true);
-      const totalEarnings = await getTotalEarnings(address || "");
-      setTotalEarnings(totalEarnings.data); 
-      setIsLoadingTotalEarnings(false);
+    const fetchPayouts = async () => {
+      const payouts = await axios.post(`${process.env.NEXT_PUBLIC_BE_URL}/api/leaderboard/get-payouts`, {
+        walletAddress: address
+      });
+      setTotalEarnings(payouts.data.data);
     };
-    fetchTotalEarnings();
+    fetchPayouts();
   }, [address]);
 
 
@@ -94,7 +94,7 @@ const Navbar = () => {
             </div>
             <div>
               <h1
-                className="text-lime-400 text-center uppercase tracking-[0.18em] text-base md:text-lg font-mono font-extrabold mr-5 md:mr-20"
+                className="text-lime-400 text-center uppercase tracking-[0.18em] text-base md:text-lg font-mono font-extrabold mr-5 md:mr-48"
                 style={{ textShadow: "0 0 10px rgba(163,230,53,0.6), 0 0 20px rgba(163,230,53,0.4)" }}
               >
                 Void.fun
@@ -117,20 +117,17 @@ const Navbar = () => {
                       isLoadingTotalEarnings ? (
                         <span className="text-lime-400 font-semibold">...</span>
                       ) : (
-                        <>
-                        <div className="w-5 h-5 rounded-full bg-lime-400 flex items-center justify-center shadow-[0_0_12px_rgba(163,230,53,0.6)]">
-                  <span className="text-black text-xs">☺</span>
-
-                </div>
-                        <span className="text-lime-400 font-semibold text-xs flex items-center">{
-                          totalEarnings > 0 ? totalEarnings.toFixed(4) : "0.0000"
-                        }</span>
-                        </>
-                      ) 
+                        <div className="flex items-center gap-2">
+                          <div className="w-4 h-4 rounded-full bg-lime-400 flex items-center justify-center shadow-[0_0_8px_rgba(163,230,53,0.6)]">
+                            <span className="text-black text-xs">☺</span>
+                          </div>
+                          <span className="text-lime-400 font-semibold tabular-nums text-xs">+{totalEarnings > 0 ? totalEarnings.toFixed(4) : "0.0000"}</span>
+                        </div>
+                      )
                     }
-                   
+
                     </>
-                  ) 
+                  )
                 }
                 </div>
                 

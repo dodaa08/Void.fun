@@ -1,7 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  experimental: {
+    reactCompiler: false,
+  },
+  transpilePackages: ['@solana/wallet-adapter-wallets'],
 };
 
 export default nextConfig;

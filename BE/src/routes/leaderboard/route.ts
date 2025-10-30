@@ -49,6 +49,22 @@ const getTotalEarnings = async (req: any, res: any) => {
     }
 }
 
+LeaderboardRouter.post("/get-payouts", async (req, res) => {
+    const { walletAddress } = req.body;
+    try {
+      const user = await User.findOne({ walletAddress });
+      if (!user) {
+        return res.status(400).json({ success: false, message: "User not found" });
+      }
+      res.status(200).json({ success: true, data: user.payouts || 0 });
+    } catch (error) {
+      logger.error("Get payouts error:", error);
+      res.status(500).json({ success: false, message: "Internal server error" });
+    }
+  });
+
+
+
 
 LeaderboardRouter.post("/get-total-earnings", getTotalEarnings);
 export default LeaderboardRouter;

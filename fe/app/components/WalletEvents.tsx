@@ -46,10 +46,8 @@ export default function WalletEvents() {
         const res = await createUser({ walletAddress, balance: 0 });
         if (cancelled) return;
         lastCreatedRef.current = walletAddress;
-        console.log("[USER] ensured", res);
       } catch (e: any) {
         lastCreatedRef.current = walletAddress;
-        console.log("[USER] ensure skipped/exists", e?.message || e);
       }
     })();
   

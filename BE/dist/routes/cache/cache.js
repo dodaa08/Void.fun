@@ -49,7 +49,6 @@ const CacheTilesRowsClicked = async (req, res) => {
                         roundsPlayed: 1
                     }
                 });
-                console.log(`[DEATH] User ${walletAddress} died. Balance reset from ${currentBalance} to 0`);
             }
             return res.status(200).json({
                 success: true,
@@ -102,11 +101,9 @@ export const CachetheIncreasingPayoutAmount = async (req, res) => {
             if (finalPayoutNum > 0) {
                 await User.updateOne({ walletAddress: key }, {
                     $inc: {
-                        totalEarned: FinalPayoutSol,
-                        payouts: FinalPayoutSol
+                        totalEarned: FinalPayoutSol // Track lifetime earnings from games
                     }
                 });
-                console.log(`[WIN] User ${key} won ${FinalPayoutSol.toFixed(4)} SOL (${finalPayoutNum} death points)`);
             }
             else {
                 await User.updateOne({ walletAddress: key }, {
@@ -114,7 +111,6 @@ export const CachetheIncreasingPayoutAmount = async (req, res) => {
                         payouts: 0
                     }
                 });
-                console.log(`[DEATH] User ${key} died - payout saved as 0 SOL`);
             }
             await redisClient.del(key);
             return res.status(200).json({
@@ -151,7 +147,6 @@ CacheRouter.get("/check-cache/:sessionId", async (req, res) => {
 });
 CacheRouter.get("/check-cache/:sessionId/:rowIndex", async (req, res) => {
     const { sessionId, rowIndex } = req.params;
-    console.log("[check-cache] sessionId", sessionId, "rowIndex", rowIndex);
     const rowkey = `game:${sessionId}:row:${rowIndex}`;
     const clicked = await redisClient.get(`${rowkey}:clicked`);
     const death = await redisClient.get(`${rowkey}:death`);
@@ -229,14 +224,12 @@ const ClearCache = async (req, res) => {
         if (!walletAddress) {
             return res.status(400).json({ success: false, message: "Wallet address is required" });
         }
-        console.log(`[ClearCache] Clearing cache for wallet: ${walletAddress}`);
         // Clear payout cache
         const payoutKey = `payout:${walletAddress}`;
         await redisClient.del(payoutKey);
         // Clear last session ID
         const sessionKey = `game:${walletAddress.toLowerCase()}:sessionId`;
         await redisClient.del(sessionKey);
-        console.log(`[ClearCache] Cleared cache keys: ${payoutKey}, ${sessionKey}`);
         return res.status(200).json({
             success: true,
             message: "Cache cleared successfully"
@@ -357,8 +350,6 @@ const StartSession = async (req, res) => {
         await redisClient.setEx(`game:${sessionId}:walletAddress`, TTL, walletAddress.toLowerCase());
         // Link wallet to this session
         await redisClient.setEx(`game:${walletAddress.toLowerCase()}:sessionId`, TTL, sessionId);
-        console.log(`[START_SESSION] Created session ${sessionId} for ${walletAddress}`);
-        console.log(`[START_SESSION] Board: ${numRows} rows, Death tiles:`, deathTiles);
         // Return session data
         // ⚠️ DO NOT reveal serverSeed yet! Only after game ends
         return res.status(200).json({

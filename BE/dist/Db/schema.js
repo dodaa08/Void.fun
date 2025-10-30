@@ -3,7 +3,7 @@ const userSchema = new Schema({
     walletAddress: { type: String, required: true, unique: true }, // identity
     referrer: { type: String, default: "" }, // wallet address of the referrer
     isReferred: { type: Boolean, default: false }, // indicates if user joined via referral link
-    DepositBalance: { type: Number, default: 0 }, // current on-platform balance (after deposits/cashouts)
+    DepositBalance: { type: Number, default: 0 }, // current deposited balance (available for withdrawal)
     balance: { type: Number, default: 0 }, // current on-platform balance (after deposits/cashouts)
     totalEarned: { type: Number, default: 0 }, // lifetime earnings
     roundsPlayed: { type: Number, default: 0 }, // total sessions

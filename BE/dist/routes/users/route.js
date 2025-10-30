@@ -60,7 +60,6 @@ const getAllUsersWithtotalEarned = async (req, res) => {
 // Route to handle wallet connection and store referral details
 const connectWallet = async (req, res) => {
     const { walletAddress, referrer } = req.body;
-    logger.debug("[Users] wallet-connect", { walletAddress, referrer: !!referrer });
     // Input validation
     if (!walletAddress) {
         logger.warn("[Users] wallet-connect missing walletAddress");

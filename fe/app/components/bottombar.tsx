@@ -15,6 +15,8 @@ import { PublicKey, SystemProgram, LAMPORTS_PER_SOL, Transaction, Keypair, Versi
 import { Program, AnchorProvider, BN } from '@coral-xyz/anchor';
 import * as anchor from '@coral-xyz/anchor';
 import idl_raw from '../contracts/casino_simple.json'; // Corrected path to IDL
+import solanaLogo from '../../public/solana.png';
+
 
 // Custom Anchor Wallet class to wrap the wallet adapter
 class CustomAnchorWallet implements anchor.Wallet {
@@ -50,6 +52,7 @@ const BottomBar = ()=>{
   const [hasHitFirstSafeTile, setHasHitFirstSafeTile] = useState(false); // Track if user hit first safe tile
   const [hasWithdrawn, setHasWithdrawn] = useState(false); // Track if user has withdrawn
   const [isVerifying, setIsVerifying] = useState(false); // Track if verify button is processing
+  const onlyDemo = !walletAddress || !connected || depositFunds === 0;
 
 
   useEffect(() => {
@@ -515,7 +518,6 @@ const BottomBar = ()=>{
       const transaction = new Transaction().add(withdrawInstruction);
       transaction.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
       transaction.feePayer = publicKey;
-      console.log("Simulating withdrawal transaction...");
       const simulationResult = await connection.simulateTransaction(transaction);
       if (simulationResult.value.err) {
         console.error("Withdrawal transaction simulation failed:", simulationResult.value.err);
@@ -524,7 +526,6 @@ const BottomBar = ()=>{
         }
         throw new Error(`Withdrawal simulation failed: ${JSON.stringify(simulationResult.value.err)}`);
       }
-      console.log("Withdrawal transaction simulation successful.");
       const signedTransactionFromWallet = await signTransaction!(transaction);
       const serializedTransaction = signedTransactionFromWallet.serialize({ requireAllSignatures: false, verifySignatures: false }).toString('base64');
       const response = await WithdrawFunds(publicKey.toBase58(), adjustedWithdrawableSOL, serializedTransaction);
@@ -551,7 +552,6 @@ const BottomBar = ()=>{
             
             if (earningsResult.success) {
               earningsTxHash = earningsResult.txHash || earningsResult.transactionHash || 'unknown';
-              console.log("Earnings payout successful:", earningsTxHash);
             } else {
               console.error("Earnings payout failed:", earningsResult.message);
             }
@@ -649,9 +649,18 @@ const BottomBar = ()=>{
     }
   };
 
+  useEffect(() => {
+    if (hasWithdrawn) {
+      setCumulativePayoutAmount(0);
+      setFinalPayoutAmount(0);
+      useGame.setState({
+        cumulativePayoutAmount: 0,
+        payoutAmount: 0
+      });
+    }
+  }, [hasWithdrawn]);
     
     
-	
 	return (
       <>
       <div className="fixed inset-x-0 bottom-6 flex justify-center px-4 transform -translate-x-20 md:-translate-x-28">
@@ -735,7 +744,7 @@ const BottomBar = ()=>{
             </div>
           </div>
           <div className="w-full flex justify-center mt-2">
-            <span className="text-lime-400 text-lg text-center">Connect Wallet & Add Funds to Play</span>
+            <span className="text-white  text-xl font-bold text-center mt-3">You need add SOL to play!</span>
           </div>
           </>
         )}
@@ -753,24 +762,31 @@ const BottomBar = ()=>{
 				</div>
 
     {/* Right */}
-    <div className="w-full flex justify-center">
+    <div className="w-full flex  justify-center mb-2">
     {!mounted ? (
-      <span className="text-lime-400 text-sm">Earnings: ...</span>
+      <span className="text-lime-400 text-sm">...</span>
     ) : isPlaying || roundEnded ? (
       <div className="flex flex-col gap-2">
-      <span className="text-lime-400 text-xl">Earnings: { (cumulativePayoutAmount / 150).toFixed(4) } SOL</span>
+      <span className="text-lime-400 text-xl text-center flex items-center gap-2 justify-center">
+         { (cumulativePayoutAmount / 150).toFixed(4) }
+         <img src={solanaLogo.src} alt="Solana Logo" width={22} height={30} className="text-white bg-white rounded-full" />
+         </span>
 
-      {Math.max(0, depositFunds) > 0 && walletAddress && (
-        <div className="flex justify-center">
-          <button 
-            onClick={handleWithdraw}
-            disabled={isWithdrawing}
-            className="bg-lime-400 text-black cursor-pointer hover:bg-lime-300 transition-colors font-semibold px-4 py-2 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isWithdrawing ? "Withdrawing..." : `Withdraw ${((depositFunds || 0) + (cumulativePayoutAmount / 150)).toFixed(4)} SOL`}
-          </button>
-        </div>
-      )}
+     
+      {(depositFunds > 0 || cumulativePayoutAmount > 0)
+ && !hasWithdrawn
+ && walletAddress
+ && !onlyDemo && (
+  <div className="flex justify-center">
+    <button 
+      onClick={handleWithdraw}
+      disabled={isWithdrawing}
+      className="bg-lime-400 text-black cursor-pointer hover:bg-lime-300 transition-colors font-semibold px-4 py-3 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
+    >
+      {isWithdrawing ? "Withdrawing..." : `Withdraw ${((depositFunds || 0) + (cumulativePayoutAmount / 150)).toFixed(4)} SOL`}
+    </button>
+  </div>
+)}
 
       {/* {depositFunds === 0 && isPlaying && (
          <div className="flex justify-center">
