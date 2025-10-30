@@ -15,7 +15,7 @@ import { PublicKey, SystemProgram, LAMPORTS_PER_SOL, Transaction, Keypair, Versi
 import { Program, AnchorProvider, BN } from '@coral-xyz/anchor';
 import * as anchor from '@coral-xyz/anchor';
 import idl_raw from '../contracts/casino_simple.json'; // Corrected path to IDL
-import solanaLogo from '../../public/solana.png';
+import Image from 'next/image';
 
 
 // Custom Anchor Wallet class to wrap the wallet adapter
@@ -52,6 +52,7 @@ const BottomBar = ()=>{
   const [hasHitFirstSafeTile, setHasHitFirstSafeTile] = useState(false); // Track if user hit first safe tile
   const [hasWithdrawn, setHasWithdrawn] = useState(false); // Track if user has withdrawn
   const [isVerifying, setIsVerifying] = useState(false); // Track if verify button is processing
+  const [showColdStartHint, setShowColdStartHint] = useState(false);
   const onlyDemo = !walletAddress || !connected || depositFunds === 0;
 
 
@@ -369,12 +370,19 @@ const BottomBar = ()=>{
 
 
     const LoadingSpinner = () => (
-      <div className="flex items-center justify-center">
-        <svg className="animate-spin h-6 w-6 text-lime-400" fill="none" viewBox="0 0 24 24">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-        </svg>
-        <span className="ml-2 text-lime-400">Loading...</span>
+      <div className="flex flex-col items-center justify-center">
+        <div className="flex items-center justify-center">
+          <svg className="animate-spin h-6 w-6 text-lime-400" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          <span className="ml-2 text-lime-400">Loading...</span>
+        </div>
+        {showColdStartHint && (
+          <div className="mt-2 text-center text-xs text-gray-400">
+            Taking longer than usual. If this is a cold start, try refreshing the page.
+          </div>
+        )}
       </div>
     );
 
@@ -417,7 +425,18 @@ const BottomBar = ()=>{
     return () => clearInterval(intervalId);
   }, [connected, publicKey, connection]);
 
-
+  // Cold-start hint if loading persists > 10s
+  useEffect(() => {
+    const isLoading = !mounted || isLoadingBalance || isMonitoringDeposit;
+    let t: NodeJS.Timeout | null = null;
+    if (isLoading) {
+      setShowColdStartHint(false);
+      t = setTimeout(() => setShowColdStartHint(true), 10000);
+    } else {
+      setShowColdStartHint(false);
+    }
+    return () => { if (t) clearTimeout(t); };
+  }, [mounted, isLoadingBalance, isMonitoringDeposit]);
 
 
     const handleWithdraw = async () => {
@@ -759,8 +778,8 @@ const BottomBar = ()=>{
     ) : isPlaying || roundEnded ? (
       <div className="flex flex-col gap-2">
       <span className="text-lime-400 text-xl text-center flex items-center gap-2 justify-center">
-         { (cumulativePayoutAmount / 150).toFixed(4) }
-         <img src={solanaLogo.src} alt="Solana Logo" width={22} height={30} className="text-white bg-white rounded-full" />
+         {(cumulativePayoutAmount / 150).toFixed(4)}
+         <Image src="/solana.png" alt="Solana Logo" width={22} height={30} className="text-white bg-white rounded-full" />
          </span>
 
      
