@@ -753,8 +753,8 @@ const BottomBar = ()=>{
               </button>
             </div>
           </div>
-          <div className="w-full flex justify-center mt-2">
-            <span className="text-white  text-xl font-bold text-center mt-3">You need add SOL to play!</span>
+          <div className="w-full flex flex-col justify-center mt-2">
+            <span className="text-white  text-lg font-bold text-center mt-3 font-sans">Add Devnet SOL to play!</span>
           </div>
           </>
         )}
@@ -763,7 +763,11 @@ const BottomBar = ()=>{
       ) :
       
       !isPlaying && !walletAddress ? (
+        <div className="flex flex-col justify-center items-center">
         <span>Connect Wallet To Play</span>
+        <span className="text-white  text-base font-semibold text-center mt-3 font-sans"> Make sure to enable devnet in your wallet settings!</span>
+        </div>
+        
       ) : isPlaying ? (
         <span></span>
       ) : (

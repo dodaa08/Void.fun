@@ -4,6 +4,7 @@ import mongoose from "mongoose";
 import dotenv from "dotenv";
 dotenv.config();
 import cors from "cors";
+import https from "https";
 
 
 const PORT = parseInt(process.env.PORT || "8001", 10);
@@ -60,4 +61,27 @@ const connectDB_and_cache = async () => {
 app.listen(PORT, "0.0.0.0", () => {
     connectDB_and_cache();
     logger.info(`Server is running on port ${PORT}`);
+    
+    // Keep-alive: Ping health endpoint every 10 minutes to prevent cold starts on Render
+    // Render free tier spins down after 15 min inactivity, so 10 min keeps it warm
+    const keepAliveInterval = 10 * 60 * 1000; // 10 minutes
+    const renderUrl = "https://void-fun.onrender.com";
+    
+    const keepAlive = () => {
+        https.get(`${renderUrl}/health`, (res) => {
+            if (res.statusCode === 200) {
+                logger.debug("Keep-alive ping successful");
+            }
+        }).on('error', (err) => {
+            logger.debug("Keep-alive ping:", err.message);
+        });
+    };
+    
+    // Start pinging after 1 minute, then every 10 minutes
+    setTimeout(() => {
+        keepAlive();
+        setInterval(keepAlive, keepAliveInterval);
+    }, 60 * 1000);
+    
+    logger.info(`Keep-alive enabled: pinging ${renderUrl}/health every 10 minutes`);
 });
