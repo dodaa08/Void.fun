@@ -2293,6 +2293,7 @@ declare const client: import("@redis/client").RedisClientType<{
     };
 } & import("redis").RedisModules, import("redis").RedisFunctions, import("redis").RedisScripts, import("redis").RespVersions, import("redis").TypeMapping>;
 declare let isConnected: boolean;
+declare const withTimeout: <T>(promise: Promise<T>, timeoutMs?: number) => Promise<T>;
 export default client;
-export { isConnected };
+export { isConnected, withTimeout };
 //# sourceMappingURL=redisClient.d.ts.map

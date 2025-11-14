@@ -1,6 +1,6 @@
 import express from "express";
 const CacheRouter = express.Router();
-import redisClient from "../../config/redisClient.js";
+import redisClient, { isConnected, withTimeout } from "../../config/redisClient.js";
 import { deleteCacheBatch } from "../../servicies/CacheService.js";
 import { User } from "../../Db/schema.js";
 import { 
@@ -390,6 +390,8 @@ const StartSession = async (req: any, res: any) => {
   const { walletAddress } = req.body;
   
   try {
+    console.log("[START_SESSION] Request received for wallet:", walletAddress);
+    
     // Validate wallet address
     if (!walletAddress) {
       return res.status(400).json({ 
@@ -398,51 +400,39 @@ const StartSession = async (req: any, res: any) => {
       });
     }
 
+    console.log("[START_SESSION] Generating session data...");
+    
     // Generate session ID (using crypto for better randomness)
     const sessionId = generateClientSeed(); // Reuse this function for UUID
+    console.log("[START_SESSION] Session ID generated:", sessionId);
     
     // Generate server seed (SECRET - determines all game outcomes)
     const serverSeed = generateServerSeed();
+    console.log("[START_SESSION] Server seed generated");
     
     // Generate server commit (hash of server seed - show to user BEFORE game)
     const serverCommit = await generateServerCommit(serverSeed);
+    console.log("[START_SESSION] Server commit generated");
     
     // Always generate client seed on server
     const finalClientSeed = generateClientSeed();
+    console.log("[START_SESSION] Client seed generated");
     
     // Generate deterministic board layout
     const numRows = await generateRowCount(serverSeed);
+    console.log("[START_SESSION] Row count:", numRows);
     const boardLayout = await generateBoard(serverSeed, numRows);
+    console.log("[START_SESSION] Board layout generated");
     
     // Pre-calculate ALL death tiles for this board
     const deathTiles = await calculateAllDeathTiles(serverSeed, boardLayout);
+    console.log("[START_SESSION] Death tiles calculated");
     
     // Get current timestamp
     const timestamp = new Date().toISOString();
     
-    // Store everything in Redis with 24-hour expiry
-    const TTL = 86400; // 24 hours in seconds
-    
-    await redisClient.setEx(`game:${sessionId}:serverSeed`, TTL, serverSeed);
-    await redisClient.setEx(`game:${sessionId}:serverCommit`, TTL, serverCommit);
-    await redisClient.setEx(`game:${sessionId}:clientSeed`, TTL, finalClientSeed);
-    await redisClient.setEx(`game:${sessionId}:boardLayout`, TTL, JSON.stringify(boardLayout));
-    await redisClient.setEx(`game:${sessionId}:deathTiles`, TTL, JSON.stringify(deathTiles));
-    await redisClient.setEx(`game:${sessionId}:timestamp`, TTL, timestamp);
-    await redisClient.setEx(`game:${sessionId}:isPlaying`, TTL, "false");
-    await redisClient.setEx(`game:${sessionId}:roundEnded`, TTL, "false");
-    await redisClient.setEx(`game:${sessionId}:walletAddress`, TTL, walletAddress.toLowerCase());
-    
-    // Link wallet to this session
-    await redisClient.setEx(
-      `game:${walletAddress.toLowerCase()}:sessionId`, 
-      TTL, 
-      sessionId
-    );
-    
-    // Return session data
-    // ⚠️ DO NOT reveal serverSeed yet! Only after game ends
-    return res.status(200).json({
+    // Return session data FIRST, then cache in background (non-blocking)
+    const responseData = {
       success: true,
       message: "Session created successfully",
       data: {
@@ -455,7 +445,33 @@ const StartSession = async (req: any, res: any) => {
         // serverSeed: NOT REVEALED YET!
         // deathTiles: NOT REVEALED YET!
       }
-    });
+    };
+    
+    // Send response immediately
+    console.log("[START_SESSION] Sending response...");
+    res.status(200).json(responseData);
+    console.log("[START_SESSION] Response sent");
+    
+    // Cache in Redis in background (don't await - fire and forget)
+    const TTL = 86400; // 24 hours in seconds
+    if (isConnected) {
+      // Run Redis operations in background without blocking
+      Promise.allSettled([
+        withTimeout(redisClient.setEx(`game:${sessionId}:serverSeed`, TTL, serverSeed), 2000).catch(() => {}),
+        withTimeout(redisClient.setEx(`game:${sessionId}:serverCommit`, TTL, serverCommit), 2000).catch(() => {}),
+        withTimeout(redisClient.setEx(`game:${sessionId}:clientSeed`, TTL, finalClientSeed), 2000).catch(() => {}),
+        withTimeout(redisClient.setEx(`game:${sessionId}:boardLayout`, TTL, JSON.stringify(boardLayout)), 2000).catch(() => {}),
+        withTimeout(redisClient.setEx(`game:${sessionId}:deathTiles`, TTL, JSON.stringify(deathTiles)), 2000).catch(() => {}),
+        withTimeout(redisClient.setEx(`game:${sessionId}:timestamp`, TTL, timestamp), 2000).catch(() => {}),
+        withTimeout(redisClient.setEx(`game:${sessionId}:isPlaying`, TTL, "false"), 2000).catch(() => {}),
+        withTimeout(redisClient.setEx(`game:${sessionId}:roundEnded`, TTL, "false"), 2000).catch(() => {}),
+        withTimeout(redisClient.setEx(`game:${sessionId}:walletAddress`, TTL, walletAddress.toLowerCase()), 2000).catch(() => {}),
+        withTimeout(redisClient.setEx(`game:${walletAddress.toLowerCase()}:sessionId`, TTL, sessionId), 2000).catch(() => {}),
+      ]).catch(() => {
+        // Silently fail - response already sent
+      });
+    }
+    
     
   } catch (error) {
     console.error("[START_SESSION] error", error);

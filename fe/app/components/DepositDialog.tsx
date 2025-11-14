@@ -28,7 +28,7 @@ interface DepositDialogProps {
 
 const DepositDialog: React.FC<DepositDialogProps> = ({ isOpen, onClose, onDepositSuccess }) => {
   const { connection } = useConnection();
-  const { publicKey, connected, signTransaction, signAllTransactions } = useWallet();
+  const { publicKey, connected, signTransaction, signAllTransactions, sendTransaction } = useWallet();
   const [amount, setAmount] = useState<number>(0.01); // Default to minimum deposit
   const [isLoading, setIsLoading] = useState(false);
   const [isAccountInitializing, setIsAccountInitializing] = useState(false);
@@ -92,6 +92,8 @@ const DepositDialog: React.FC<DepositDialogProps> = ({ isOpen, onClose, onDeposi
         await program.account.userAccount.fetch(userAccountPda);
       } catch (e) {
         console.warn("User account PDA not found, attempting to initialize...");
+        
+        // Build instruction
         const initializeUserAccountIx = await program.methods
           .initializeUserAccount()
           .accounts({
@@ -102,15 +104,52 @@ const DepositDialog: React.FC<DepositDialogProps> = ({ isOpen, onClose, onDeposi
           })
           .instruction();
 
-        const initializeUserAccountTx = new Transaction().add(initializeUserAccountIx);
-        initializeUserAccountTx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
-        initializeUserAccountTx.feePayer = publicKey; // User pays for their account initialization
-
-        const signedInitializeUserAccountTx = await signTransaction!(initializeUserAccountTx);
-
-        const txid = await connection.sendRawTransaction(signedInitializeUserAccountTx.serialize());
-        await connection.confirmTransaction(txid, 'confirmed');
-        toast.success("User account initialized!");
+        // Create transaction - sendTransaction will handle blockhash automatically
+        const tx = new Transaction().add(initializeUserAccountIx);
+        
+        // Use sendTransaction which handles blockhash refresh automatically
+        if (sendTransaction) {
+          const txid = await sendTransaction(tx, connection, {
+            skipPreflight: false,
+          });
+          
+          await connection.confirmTransaction(txid, 'confirmed');
+          toast.success("User account initialized!");
+        } else {
+          // Fallback: manual signing with retry logic
+          let retries = 3;
+          let txid: string | null = null;
+          
+          while (retries > 0 && !txid) {
+            try {
+              const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('finalized');
+              tx.recentBlockhash = blockhash;
+              tx.feePayer = publicKey;
+              
+              const signedTx = await signTransaction!(tx);
+              txid = await connection.sendRawTransaction(signedTx.serialize(), {
+                skipPreflight: false,
+              });
+              
+              await connection.confirmTransaction({
+                signature: txid,
+                blockhash,
+                lastValidBlockHeight,
+              }, 'confirmed');
+              
+              toast.success("User account initialized!");
+              break;
+            } catch (error: any) {
+              retries--;
+              if (error.message?.includes('Blockhash') && retries > 0) {
+                // Blockhash expired, retry with fresh one
+                await new Promise(resolve => setTimeout(resolve, 500));
+                continue;
+              }
+              throw error;
+            }
+          }
+        }
       }
     } catch (error: any) {
       console.error("Error checking/initializing accounts:", error);

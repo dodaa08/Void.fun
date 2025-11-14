@@ -102,3 +102,6 @@ Cargo.lock
 # Solana
 .anchor/
 test-ledger/
+
+
+env-100xsolana-hack.txt
