@@ -1,4 +1,4 @@
-# Void.fun
+# Void
 
 A provably fair, on-chain casino game built on Solana. Navigate through tiles, avoid death traps, and cash out your winnings. Inspired by death.fun.
 
