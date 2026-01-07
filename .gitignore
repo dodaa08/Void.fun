@@ -97,11 +97,16 @@ Thumbs.db
 
 # Rust
 target/
-Cargo.lock
 
-# Solana
+# Solana / Anchor
 .anchor/
 test-ledger/
 
+# Generated/Build files
+tsconfig.tsbuildinfo
+*.tsbuildinfo
 
+# Private keys / secrets
 env-100xsolana-hack.txt
+*.pem
+*.key

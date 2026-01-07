@@ -1,93 +1,125 @@
-# Solana Casino Project
+# Void.fun
 
-A decentralized casino application built on Solana blockchain with Next.js frontend and Node.js backend.
+A provably fair, on-chain casino game built on Solana. Navigate through tiles, avoid death traps, and cash out your winnings. Inspired by death.fun.
 
-## Project Structure
+**Live Demo:** [void-fun.onrender.com](https://void-fun.onrender.com)
+
+## How It Works
+
+Players deposit SOL and navigate a randomly generated tile board. Each row contains one hidden "death tile" - hit it and you lose everything. Successfully navigate rows to multiply your stake. Cash out anytime or risk it all for higher multipliers.
+
+The game is **provably fair**: death tile positions are determined by a server seed that's committed (hashed) before you play. After each round, you can verify that outcomes weren't manipulated.
+
+## Features
+
+- **On-chain deposits & withdrawals** - SOL moves directly through Solana smart contracts
+- **Provably fair** - SHA-256 commit-reveal scheme, verify any game session
+- **Real-time caching** - Redis-backed game state for seamless gameplay
+- **Leaderboard** - Track top earners
+
+## Contract Addresses
+
+| Network | Address |
+|---------|---------|
+| **Casino Program** (Devnet) | `7eoY2tr9vaZEEjX1q64q3ovND5Erg9ZjK8CfujxDfh8p` |
+| **Casino PDA** | `HbiPVZB2aUPxEz4V3GLy52jTfB3ChmBAj8hmjZun641t` |
+| **Authority** | `CUcTGB5CyRhfh9jvVDZB734DG38XfZFX1a3L86FosSBu` |
+
+## Architecture
 
 ```
-Solana/
-├── BE/                 # Backend API server
-├── casino/            # Solana program (smart contract)
-├── fe/                # Frontend Next.js application
-└── README.md          # This file
+├── fe/              # Next.js frontend
+│   ├── components/  # React components (tileboard, leaderboard, etc.)
+│   ├── store/       # Zustand game state
+│   └── services/    # API + on-chain interactions
+│
+├── BE/              # Express.js backend
+│   ├── routes/      # deposit, withdraw, payouts, cache
+│   ├── servicies/   # Redis caching layer
+│   └── Db/          # MongoDB schemas
+│
+└── contract/        # Anchor smart contract (Solana program)
+    └── programs/    # deposit, withdraw, payout instructions
 ```
 
-## Components
-
-### Backend (BE/)
-- Node.js/Express API server
-- Handles user authentication and game logic
-- Connects to Solana blockchain for transactions
-- Uses MongoDB for data persistence
-- Redis for session management
-
-### Casino Program (casino/)
-- Solana smart contract written in Rust
-- Handles on-chain game logic and fund management
-- Implements deposit, withdraw, and payout functionality
-
-### Frontend (fe/)
-- Next.js React application
-- User interface for casino games
-- Wallet integration for Solana transactions
-- Real-time game updates
-
-## Getting Started
+## Quick Start
 
 ### Prerequisites
-- Node.js (v16 or higher)
-- Rust and Solana CLI tools
+
+- Node.js 18+
+- Rust + Solana CLI (for contract development)
 - MongoDB
 - Redis
 
-### Installation
+### Backend
 
-1. Clone the repository
-2. Install dependencies for each component:
-   ```bash
-   # Backend
-   cd BE && npm install
-   
-   # Frontend
-   cd fe && npm install
-   
-   # Casino program
-   cd casino && cargo build
-   ```
+```bash
+cd BE
+npm install
+cp .env.example .env  # Configure your environment
+npm run dev
+```
 
-3. Set up environment variables:
-   - Copy `.env.example` to `.env` in each directory
-   - Configure Solana RPC URL, program ID, and other settings
+Required env vars:
+- `SOLANA_RPC_URL` - Devnet RPC endpoint
+- `CASINO_PROGRAM_ID` - Deployed program ID
+- `SOLANA_AUTHORITY_PRIVATE_KEY` - Authority keypair (JSON array format)
+- `MONGO_DB_URL` - MongoDB connection string
+- `REDIS_URL` - Redis connection string
 
-4. Start the services:
-   ```bash
-   # Backend
-   cd BE && npm run dev
-   
-   # Frontend
-   cd fe && npm run dev
-   ```
+### Frontend
 
-## Environment Variables
+```bash
+cd fe
+npm install
+npm run dev
+```
 
-### Backend (.env)
-- `SOLANA_RPC_URL`: Solana RPC endpoint
-- `CASINO_PROGRAM_ID`: Deployed program ID
-- `SOLANA_AUTHORITY_PRIVATE_KEY`: Authority keypair
-- `MONGO_DB_URL`: MongoDB connection string
-- `REDIS_URL`: Redis connection string
-- `PORT`: Server port (default: 8001)
+Frontend runs on `localhost:3000`, backend on `localhost:8001`.
 
-### Frontend (.env.local)
-- `NEXT_PUBLIC_CASINO_PROGRAM_ID`: Program ID for frontend
-- `NEXT_PUBLIC_SOLANA_RPC_URL`: RPC URL for frontend
+### Smart Contract
 
-## Development
+```bash
+cd contract
+anchor build
+anchor deploy --provider.cluster devnet
+```
 
-- Backend runs on port 8001
-- Frontend runs on port 3000
-- Casino program deploys to Solana devnet/testnet
+## Game Mechanics
 
-## License
+1. **Deposit** - Send SOL to casino PDA, credited to your user account
+2. **Play** - Click tiles row by row, avoiding death tiles
+3. **Multipliers** - Each successful row increases your potential payout (starts ~1.10x, grows ~1.18x per row)
+4. **Cash out** - Withdraw anytime to lock in winnings
+5. **Death tile** - Hit it and lose your stake + accumulated earnings
 
-This project is for educational purposes.
+## Provably Fair Verification
+
+Each game session:
+1. Server generates a random seed
+2. `SHA-256(seed)` is committed before gameplay
+3. Death tiles derived from `SHA-256(seed + "-row" + rowIndex)`
+4. After round ends, seed is revealed - verify the commit matches
+
+Visit `/verify?sessionId=<id>` to verify any session.
+
+## Tech Stack
+
+- **Frontend:** Next.js 14, Tailwind CSS, Zustand, Solana Wallet Adapter
+- **Backend:** Express.js, MongoDB, Redis
+- **Blockchain:** Solana, Anchor Framework
+- **Deployment:** Render (backend), Vercel-compatible (frontend)
+
+## API Routes
+
+| Endpoint | Description |
+|----------|-------------|
+| `POST /api/depositFunds/dp` | Process deposit transaction |
+| `POST /api/withdrawFunds/wd` | Process withdrawal |
+| `POST /api/payouts/` | Payout winnings |
+| `POST /api/cache/tile` | Cache tile selection |
+| `GET /api/leaderboard/` | Fetch leaderboard |
+
+---
+
+Built for 100x Solana Hackathon
