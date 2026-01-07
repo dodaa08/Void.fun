@@ -99,31 +99,31 @@ function VerifyContent() {
     })();
   }, [sessionId]);
 
-  return (
+   return (
     <div className="max-w-3xl mx-auto px-4 py-10">
-      <h1 className="text-xl font-semibold text-white">Verify Session</h1>
+      <h1 className="text-xl font-semibold text-gray-900 dark:text-white">Verify Session</h1>
 
       <div className="mt-4">
-        <label className="text-sm text-gray-400">Session ID</label>
+        <label className="text-sm text-gray-600 dark:text-gray-400">Session ID</label>
         <div className="mt-1">
           <input
             defaultValue={sessionId}
-            className="w-full bg-[#0f172a] border border-gray-700 rounded px-3 py-2 text-white"
+            className="w-full bg-gray-100 dark:bg-[#0f172a] border border-gray-300 dark:border-gray-700 rounded px-3 py-2 text-gray-900 dark:text-white"
             readOnly
           />
         </div>
       </div>
 
       {loading && (
-        <div className="mt-6 text-gray-300">Verifying...</div>
+        <div className="mt-6 text-gray-700 dark:text-gray-300">Verifying...</div>
       )}
 
       {error && (
-        <div className="mt-6 text-red-400">{error}</div>
+        <div className="mt-6 text-red-600 dark:text-red-400">{error}</div>
       )}
 
       {result && (
-        <div className="mt-6 space-y-3 text-gray-200">
+        <div className="mt-6 space-y-3 text-gray-800 dark:text-gray-200">
           <div>Commit: <span className="font-mono">{result.serverCommit}</span></div>
           <div>Server Seed: <span className="font-mono">{result.serverSeed}</span></div>
           <div>Rows: {result.boardLayout.length}</div>
@@ -133,10 +133,10 @@ function VerifyContent() {
           )}
 
           <div className="mt-6">
-            <div className="text-sm text-gray-400 mb-2">Death tiles (0-based index)</div>
-            <div className="overflow-x-auto border border-gray-800 rounded-lg">
+            <div className="text-sm text-gray-600 dark:text-gray-400 mb-2">Death tiles (0-based index)</div>
+            <div className="overflow-x-auto border border-gray-300 dark:border-gray-800 rounded-lg">
               <table className="min-w-full text-sm">
-                <thead className="bg-[#0f172a] text-gray-400">
+                <thead className="bg-gray-200 dark:bg-[#0f172a] text-gray-700 dark:text-gray-400">
                   <tr>
                     <th className="px-3 py-2 text-left font-medium">Row</th>
                     <th className="px-3 py-2 text-left font-medium">Tiles</th>
@@ -145,7 +145,7 @@ function VerifyContent() {
                 </thead>
                 <tbody>
                   {result.boardLayout.map((tiles, row) => (
-                    <tr key={row} className="odd:bg-[#0b1324] even:bg-[#0d1426] text-gray-200">
+                    <tr key={row} className="odd:bg-gray-50 even:bg-white dark:odd:bg-[#0b1324] dark:even:bg-[#0d1426] text-gray-800 dark:text-gray-200">
                       <td className="px-3 py-2 font-mono">{row}</td>
                       <td className="px-3 py-2">{tiles}</td>
                       <td className="px-3 py-2 font-mono">{result.deathTiles[row]}</td>
