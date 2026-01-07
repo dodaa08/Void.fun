@@ -40,7 +40,10 @@ function VerifyContent() {
   }>(null);
 
   useEffect(() => {
-    if (!sessionId) return;
+    if (!sessionId) {
+      setError("No session ID provided. Please provide a valid session ID in the URL.");
+      return;
+    }
     (async () => {
       setLoading(true);
       setError(null);
@@ -92,7 +95,12 @@ function VerifyContent() {
           mismatches,
         });
       } catch (e: any) {
-        setError(e?.message || "Failed to verify session.");
+        const msg = e?.message || "";
+        if (msg.includes("404")) {
+          setError("Session not found or expired. The session may have been deleted or the ID is invalid.");
+        } else {
+          setError(msg || "Failed to verify session.");
+        }
       } finally {
         setLoading(false);
       }
