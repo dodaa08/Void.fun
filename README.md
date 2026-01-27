@@ -2,8 +2,6 @@
 
 A provably fair, on-chain casino game built on Solana. Navigate through tiles, avoid death traps, and cash out your winnings. Inspired by death.fun.
 
-**Live Demo:** [void-fun.onrender.com](https://void-fun.onrender.com)
-
 ## How It Works
 
 Players deposit SOL and navigate a randomly generated tile board. Each row contains one hidden "death tile" - hit it and you lose everything. Successfully navigate rows to multiply your stake. Cash out anytime or risk it all for higher multipliers.
